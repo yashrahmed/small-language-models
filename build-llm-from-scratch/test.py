@@ -30,7 +30,7 @@ def test_tiktoken():
     # I would like to implement it.
 
     import tiktoken
-    tokenizer = tiktoken.get_encoding("gpt2")
+    tokenizer = tiktoken.encoding_for_model("gpt-2")
     sentence1 = "Hello! Do you like tea?"
     sentence2 = "In the sunlit terraces of the palace."
     sentence = f"{END_OF_TEXT_TOKEN}".join([sentence1, sentence2])
@@ -39,9 +39,25 @@ def test_tiktoken():
     print(token_ids)
     print(tokenizer.decode(token_ids))
 
+def test_data_sampling():
+    # import tiktoken
+    # tokenizer = tiktoken.encoding_for_model("gpt-2")
+    text = load_text()
+    
+    from llm_components import create_dataloder_v1
 
+    dataloader = create_dataloder_v1(text, batch_size=3, max_length=4, stride=1, shuffle=False)
+    dl_iter = iter(dataloader)
+    inputs, targets = next(dl_iter)
+    print(inputs)
+    # print(targets)
+    print('++++++++++++++++++++')
+    inputs, targets = next(dl_iter)
+    print(inputs)
+    # print(targets)
 
 if __name__ == '__main__':
     text = load_text()
-    test_tiktoken()
+    test_data_sampling()
+
     
