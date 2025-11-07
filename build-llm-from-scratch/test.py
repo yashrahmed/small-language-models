@@ -56,8 +56,39 @@ def test_data_sampling():
     print(inputs)
     # print(targets)
 
-if __name__ == '__main__':
-    text = load_text()
-    test_data_sampling()
+def testing_simple_embedding():
+    """
+    input text --> input token --> input token ids --> token embedding + position embedding --> input embedding.
+    """
+    from torch.nn import Embedding
+    from torch import tensor
+    import torch
 
+    vocab_size = 6
+    embed_dim = 3
+    max_seq_len = 5
+
+    torch.manual_seed(123)
     
+    tok_embedding_layer = Embedding(vocab_size, embed_dim)
+    pos_embedding_layer = Embedding(max_seq_len, embed_dim)
+
+    x = tok_embedding_layer(tensor([3, 1, 2, 5, 1]))
+    positions = torch.arange(max_seq_len)
+    x_p = pos_embedding_layer(positions)
+
+    print(x)
+    print(x.shape)
+    print(x_p.shape)
+
+    x_act = x + x_p
+    print(x_act)
+
+
+
+
+if __name__ == '__main__':
+    testing_simple_embedding()
+    # test_data_sampling()
+
+     
