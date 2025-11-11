@@ -63,32 +63,66 @@ def testing_simple_embedding():
     from torch.nn import Embedding
     from torch import tensor
     import torch
+    import tiktoken
 
-    vocab_size = 6
+    tokenizer = tiktoken.encoding_for_model("gpt-2")
+    sentence1 = "Your journey starts with one step"
+    token_ids = tokenizer.encode(sentence1)
+    print(tokenizer.n_vocab)
+    print(token_ids)
+
+
+    vocab_size = tokenizer.n_vocab
     embed_dim = 3
-    max_seq_len = 5
+    max_seq_len = len(token_ids)
 
     torch.manual_seed(123)
     
     tok_embedding_layer = Embedding(vocab_size, embed_dim)
     pos_embedding_layer = Embedding(max_seq_len, embed_dim)
 
-    x = tok_embedding_layer(tensor([3, 1, 2, 5, 1]))
+    x = tok_embedding_layer(tensor(token_ids))
     positions = torch.arange(max_seq_len)
     x_p = pos_embedding_layer(positions)
 
     print(x)
-    print(x.shape)
-    print(x_p.shape)
+    print(x_p)
 
     x_act = x + x_p
     print(x_act)
+
+def building_simple_self_attention():
+    from torch import tensor, softmax
+    import torch.nn.functional as F
+    inputs = tensor(
+        [
+            [0.43, 0.15, 0.89],# Your
+            [0.55, 0.87, 0.66],# journey
+            [0.57, 0.85, 0.64],# starts
+            [0.22, 0.58, 0.33],# with
+            [0.77, 0.25, 0.10],# one
+            [0.05, 0.80, 0.55] # step
+        ]
+    )
+    # query = inputs[[1]]
+    # print(query.shape, inputs.T.shape)
+    # attn_score_2 = query @ inputs.T # Effectively compute the dot product of the second embedding with all embeddings including itself.
+    # # attn = F.normalize(attn_score_2, p=1, dim=1) # Normalize along rows using the Manhattan metric.
+    # attn = softmax(attn_score_2, dim=1)
+    
+    attn_2 = inputs @ inputs.T
+    attn_weights = softmax(attn_2, dim=1)
+    # print(attn_weights)
+    attn_output = attn_weights @ inputs
+    print(attn_output)
+
 
 
 
 
 if __name__ == '__main__':
-    testing_simple_embedding()
+    building_simple_self_attention()
+    # testing_simple_embedding()
     # test_data_sampling()
 
      
