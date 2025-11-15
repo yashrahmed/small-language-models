@@ -93,7 +93,6 @@ def testing_simple_embedding():
 
 def building_simple_self_attention():
     from torch import tensor, softmax
-    import torch.nn.functional as F
     inputs = tensor(
         [
             [0.43, 0.15, 0.89],# Your
@@ -116,12 +115,49 @@ def building_simple_self_attention():
     attn_output = attn_weights @ inputs
     print(attn_output)
 
+def building_weighted_self_attention():
+    from torch import tensor, softmax, manual_seed, nn, rand
+
+    manual_seed(123)
+
+    inputs = tensor(
+        [
+            [0.43, 0.15, 0.89],# Your
+            [0.55, 0.87, 0.66],# journey
+            [0.57, 0.85, 0.64],# starts
+            [0.22, 0.58, 0.33],# with
+            [0.77, 0.25, 0.10],# one
+            [0.05, 0.80, 0.55] # step
+        ]
+    )
+
+    dim_in = 3
+    dim_out = 2
+
+    W_q = nn.Parameter(rand(dim_in, dim_out), requires_grad=False)
+    W_k = nn.Parameter(rand(dim_in, dim_out), requires_grad=False)
+    W_v = nn.Parameter(rand(dim_in, dim_out), requires_grad=False)
+
+    q_v = inputs @ W_q
+    k_v = inputs @ W_k
+    v_v = inputs @ W_v
+
+    attn = q_v @ k_v.T
+    d_k = q_v.shape[1]
+    attn = softmax(attn / d_k**0.5, dim = 1)
+
+    output = attn @ v_v
+
+    print(output)
+
+
 
 
 
 
 if __name__ == '__main__':
-    building_simple_self_attention()
+    building_weighted_self_attention()
+    # building_simple_self_attention()
     # testing_simple_embedding()
     # test_data_sampling()
 
