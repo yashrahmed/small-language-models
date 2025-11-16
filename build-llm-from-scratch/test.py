@@ -1,6 +1,5 @@
 from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN
 
-
 def load_text():
     with open('verdict.txt', 'r') as book:
         text = book.read()
@@ -132,7 +131,7 @@ def building_weighted_self_attention():
     )
 
     dim_in = 3
-    dim_out = 2
+    dim_out = 2 
 
     W_q = nn.Parameter(rand(dim_in, dim_out), requires_grad=False)
     W_k = nn.Parameter(rand(dim_in, dim_out), requires_grad=False)
@@ -150,13 +149,82 @@ def building_weighted_self_attention():
 
     print(output)
 
+def build_compact_attention_layers():
+    import torch
+    from torch import nn, softmax, tensor, rand, manual_seed
 
+    manual_seed(123)
+
+    class SelfAttentionV1(nn.Module):
+        def __init__(self, d_in, d_space):
+            super().__init__()
+            self.W_query = nn.Parameter(rand(d_in, d_space))
+            self.W_key = nn.Parameter(rand(d_in, d_space))
+            self.W_value = nn.Parameter(rand(d_in, d_space))
+        
+        def forward(self, input_emb):
+            query_op = input_emb @ self.W_query
+            key_op = input_emb @ self.W_key
+            value_op = input_emb @ self.W_value
+
+            attn_mat = query_op @ key_op.T
+            d_k = key_op.shape[-1]
+            attn_mat = softmax(attn_mat / d_k ** 0.5, dim=-1) 
+
+            context_vec = attn_mat @ value_op
+            return context_vec
+    
+    class SelfAttentionV2(nn.Module):
+        def __init__(self, d_in, d_space, bias_on=False):
+            super().__init__()
+            self.W_key = nn.Linear(d_in, d_space, bias_on)
+            self.W_query = nn.Linear(d_in, d_space, bias_on)
+            self.W_value = nn.Linear(d_in, d_space, bias_on)
+        
+        def forward(self, input_emb):
+            key_op = self.W_key(input_emb)
+            query_op = self.W_query(input_emb)
+            value_op = self.W_value(input_emb)
+
+            attn_mat = query_op @ key_op.T
+            d_k = key_op.shape[-1]
+            attn_mat = softmax(attn_mat / d_k ** 0.5, dim=-1)
+
+            context_vec = attn_mat @ value_op
+            return context_vec
+
+        
+    inputs = tensor(
+        [
+            [0.43, 0.15, 0.89],# Your
+            [0.55, 0.87, 0.66],# journey
+            [0.57, 0.85, 0.64],# starts
+            [0.22, 0.58, 0.33],# with
+            [0.77, 0.25, 0.10],# one
+            [0.05, 0.80, 0.55] # step
+        ]
+    )
+
+    layer_v1 = SelfAttentionV1(3, 2)
+    print(layer_v1(inputs))
+    
+    layer_v2 = SelfAttentionV2(3, 2, False)
+    
+    # # Experiment to copy the weights of one into the other to prove that the operations are the same
+    # with torch.no_grad():
+    #     layer_v2.W_key.weight.copy_(layer_v1.W_key.T)
+    #     layer_v2.W_query.weight.copy_(layer_v1.W_query.T)
+    #     layer_v2.W_value.weight.copy_(layer_v1.W_value.T)
+
+    print(layer_v2(inputs))
 
 
 
 
 if __name__ == '__main__':
-    building_weighted_self_attention()
+    build_compact_attention_layers()
+    print('+++++++++++++++++++++++++++')
+    # building_weighted_self_attention()
     # building_simple_self_attention()
     # testing_simple_embedding()
     # test_data_sampling()
