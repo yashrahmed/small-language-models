@@ -218,11 +218,56 @@ def build_compact_attention_layers():
 
     print(layer_v2(inputs))
 
+def building_causal_attention_wdropout():
+    import torch
+    from torch import nn, softmax, tensor, rand, manual_seed, triu, ones, inf
 
+    manual_seed(123)
+
+    class CausalAttention(nn.Module):
+        def __init__(self, d_in, d_space, context_len, drop_rate, bias_on=False):
+            super().__init__()
+            self.W_key = nn.Linear(d_in, d_space, bias_on)
+            self.W_query = nn.Linear(d_in, d_space, bias_on)
+            self.W_value = nn.Linear(d_in, d_space, bias_on)
+            self.register_buffer('mask', triu(ones(context_len, context_len), diagonal=1))
+            self.dropout = nn.Dropout(drop_rate)
+        
+        def forward(self, input_emb): 
+            _, num_tokens, _ = input_emb.shape
+            key_op = self.W_key(input_emb)
+            query_op = self.W_query(input_emb)
+            value_op = self.W_value(input_emb)
+
+            attn_mat = query_op @ key_op.transpose(1,2) # Require for batch operations
+            d_k = key_op.shape[-1]
+            # num_tokens must be < context_len
+            attn_mat = attn_mat.masked_fill_(self.mask.bool()[:num_tokens, :num_tokens], -inf) # trailing _ indicates an inplace variant of the function.
+            attn_mat = softmax(attn_mat / d_k ** 0.5, dim=-1)
+
+            context_vec = attn_mat @ value_op
+            return context_vec
+        
+    inputs = tensor(
+        [ # First batch
+            [
+                [0.43, 0.15, 0.89],# Your
+                [0.55, 0.87, 0.66],# journey
+                [0.57, 0.85, 0.64],# starts
+                [0.22, 0.58, 0.33],# with
+                [0.77, 0.25, 0.10],# one
+                [0.05, 0.80, 0.55] # step
+            ]
+        ]
+    )
+
+    layer_v1 = CausalAttention(3, 2, 6, 0)
+    print(layer_v1(inputs))
 
 
 if __name__ == '__main__':
-    build_compact_attention_layers()
+    building_causal_attention_wdropout()
+    # build_compact_attention_layers()
     print('+++++++++++++++++++++++++++')
     # building_weighted_self_attention()
     # building_simple_self_attention()
