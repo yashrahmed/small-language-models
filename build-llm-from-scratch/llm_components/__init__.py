@@ -6,3 +6,6 @@ from .components import (
     GPTDatasetV1,
     create_dataloder_v1
 )
+from .llm_parts import (
+    CausalMultiHeadedAttention
+)
