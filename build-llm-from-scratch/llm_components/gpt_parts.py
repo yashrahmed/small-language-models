@@ -1,6 +1,51 @@
 import torch
 from torch import nn, softmax, triu, ones, inf
 
+class GPTConfig124M:
+    def __init__(self):
+        self._vocab_size = 50257
+        self._content_length = 1024
+        self._embed_dim = 768
+        self._n_heads = 12
+        self._n_layers = 12
+        self._dropout_rate = 0.1
+        self._qkv_bias = False
+
+    # --------------------
+    # Getters
+    # --------------------
+    def get_vocab_size(self):
+        return self._vocab_size
+
+    def get_content_length(self):
+        return self._content_length
+
+    def get_embed_dim(self):
+        return self._embed_dim
+
+    def get_n_heads(self):
+        return self._n_heads
+
+    def get_n_layers(self):
+        return self._n_layers
+
+    def get_dropout_rate(self):
+        return self._dropout_rate
+
+    def get_qkv_bias(self):
+        return self._qkv_bias
+
+    # Optional: export as dict
+    def to_dict(self):
+        return {
+            "vocab_size": self._vocab_size,
+            "content_length": self._content_length,
+            "embed_dim": self._embed_dim,
+            "n_heads": self._n_heads,
+            "n_layers": self._n_layers,
+            "dropout_rate": self._dropout_rate,
+            "qkv_bias": self._qkv_bias,
+        }
 
 class CausalMultiHeadedAttention(nn.Module):
         def __init__(self, d_in, d_space, context_len, num_heads, drop_rate, bias_on=False):
@@ -57,4 +102,4 @@ class CausalMultiHeadedAttention(nn.Module):
             # a.k.a. remixing cross head interactions.
             return self.W_out(context_vec)
 
-    
+GPT_CONFIG_124M = GPTConfig124M()    
