@@ -1,4 +1,4 @@
-from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm, GELU
+from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm, GELU, FeedForward
 
 def load_text():
     with open('verdict.txt', 'r') as book:
@@ -306,9 +306,9 @@ def try_layer_norm():
     print(op_mean)
     print(op_var)
 
-def try_gelu():
+def try_ff_layer():
     import torch
-    from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace
+    from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand
     
     import matplotlib.pyplot as plt
 
@@ -325,11 +325,14 @@ def try_gelu():
         plt.grid(True)
     plt.tight_layout()
     plt.show()
-
+        
+    inputs = rand(2, 6, 768)
+    output = FeedForward(768)(inputs)
+    print(output.shape)
 
 
 if __name__ == '__main__':
-    try_gelu()
+    try_ff_layer()
     # try_layer_norm()
     # building_causal_multiheaded_attention()
     # building_causal_attention_wdropout()

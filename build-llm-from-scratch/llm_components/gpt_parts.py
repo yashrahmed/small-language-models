@@ -108,6 +108,18 @@ class CausalMultiHeadedAttention(nn.Module):
             # a.k.a. remixing cross head interactions.
             return self.W_out(context_vec)
 
+class FeedForward(nn.Module):
+        def __init__(self, dims):
+            super().__init__()
+            self.layers = nn.Sequential(
+                nn.Linear(dims, 4 * dims), # Leave the bias true as this isn't an attention layer.
+                GELU(), 
+                nn.Linear(4 * dims, dims)
+            )            
+        
+        def forward(self, x):
+            return self.layers(x)
+
 class GELU(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -116,8 +128,6 @@ class GELU(nn.Module):
     def forward(self, x):
         tmp = (x + 0.044715 * pow(x, 3))
         return 0.5 * x * (1 + tanh(self.K * tmp))
-
-
 
 class LayerNorm(nn.Module):
     def __init__(self, input_dim):
