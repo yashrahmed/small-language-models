@@ -1,5 +1,5 @@
 import torch
-from torch import nn, softmax, triu, ones, inf
+from torch import nn, softmax, triu, ones, zeros, mean, var, sqrt, inf
 
 class GPTConfig124M:
     def __init__(self):
@@ -101,5 +101,18 @@ class CausalMultiHeadedAttention(nn.Module):
             # Think of it like a weighting sum layer for all the value vectors
             # a.k.a. remixing cross head interactions.
             return self.W_out(context_vec)
+
+class LayerNorm(nn.Module):
+    def __init__(self, input_dim):
+        super().__init__()
+        self.scale = nn.Parameter(ones(input_dim))
+        self.shift = nn.Parameter(zeros(input_dim)) # Scale and shift are trainable parameters
+        self.eps = 1e-5
+    
+    def forward(self, x):
+        x_mean = mean(x, dim=-1, keepdim=True)  # Keep dim true is required for broadcasting when x_norm is calculated.
+        x_var = var(x, dim=-1, keepdim=True, unbiased=False) 
+        x_norm = (x - x_mean) / sqrt(x_var + self.eps)
+        return self.scale * x_norm + self.shift
 
 GPT_CONFIG_124M = GPTConfig124M()    

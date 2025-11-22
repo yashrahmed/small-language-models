@@ -1,4 +1,4 @@
-from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention
+from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm
 
 def load_text():
     with open('verdict.txt', 'r') as book:
@@ -288,8 +288,28 @@ def building_causal_multiheaded_attention():
     output = layer(inputs)
     print(output.shape)
 
+def try_layer_norm():
+    import torch
+    from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt
+
+    manual_seed(123)
+    norm_layer = LayerNorm(6)
+    batch_ex = randn(2, 5) # 2 inputs of 5 dim each.
+    dummmy_layer = nn.Sequential(nn.Linear(5, 6), nn.ReLU()) # A composite layer made of 6 neurons with ReLU activation.
+    output = dummmy_layer(batch_ex)
+    output = norm_layer(output)
+    print(output)
+
+    keep_dim = True
+    op_mean = mean(output, dim=-1, keepdim=keep_dim)
+    op_var = var(output, dim=-1, keepdim=keep_dim)
+    print(op_mean)
+    print(op_var)
+
+
 if __name__ == '__main__':
-    building_causal_multiheaded_attention()
+    try_layer_norm()
+    # building_causal_multiheaded_attention()
     # building_causal_attention_wdropout()
     # build_compact_attention_layers()
     print('+++++++++++++++++++++++++++')
