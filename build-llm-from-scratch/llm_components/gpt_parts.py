@@ -1,5 +1,11 @@
-import torch
-from torch import nn, softmax, triu, ones, zeros, mean, var, sqrt, inf
+from torch import (
+    tensor, nn, softmax,
+    triu,
+    ones, zeros,
+    mean, var,
+    sqrt, tanh,
+    inf, pi
+)
 
 class GPTConfig124M:
     def __init__(self):
@@ -101,6 +107,17 @@ class CausalMultiHeadedAttention(nn.Module):
             # Think of it like a weighting sum layer for all the value vectors
             # a.k.a. remixing cross head interactions.
             return self.W_out(context_vec)
+
+class GELU(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.K = sqrt(tensor(2 / pi)) # K = sqrt(2/pi)
+
+    def forward(self, x):
+        tmp = (x + 0.044715 * pow(x, 3))
+        return 0.5 * x * (1 + tanh(self.K * tmp))
+
+
 
 class LayerNorm(nn.Module):
     def __init__(self, input_dim):

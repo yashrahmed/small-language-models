@@ -1,4 +1,4 @@
-from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm
+from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm, GELU
 
 def load_text():
     with open('verdict.txt', 'r') as book:
@@ -306,13 +306,35 @@ def try_layer_norm():
     print(op_mean)
     print(op_var)
 
+def try_gelu():
+    import torch
+    from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace
+    
+    import matplotlib.pyplot as plt
+
+    gelu, relu = GELU(), nn.ReLU()
+
+    x =  linspace(-3, 3, 100) # 100 x-axis values.
+    y_gelu, y_relu = gelu(x), relu(x)
+    for i, (y, plot_label) in enumerate(zip([y_gelu, y_relu], ['GELU', 'RELU']), 1):
+        plt.subplot(1, 2, i)
+        plt.plot(x, y)
+        plt.xlabel('x axis')
+        plt.ylabel('activation')
+        plt.title(f"{plot_label} activation")
+        plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
 
 if __name__ == '__main__':
-    try_layer_norm()
+    try_gelu()
+    # try_layer_norm()
     # building_causal_multiheaded_attention()
     # building_causal_attention_wdropout()
     # build_compact_attention_layers()
-    print('+++++++++++++++++++++++++++')
+    # print('+++++++++++++++++++++++++++')
     # building_weighted_self_attention()
     # building_simple_self_attention()
     # testing_simple_embedding()

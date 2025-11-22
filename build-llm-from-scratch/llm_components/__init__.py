@@ -8,6 +8,7 @@ from .components import (
 )
 from .gpt_parts import (
     CausalMultiHeadedAttention,
+    GELU,
     LayerNorm,
     GPT_CONFIG_124M
 )
