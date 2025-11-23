@@ -54,11 +54,11 @@ class GPTConfig124M:
         }
 
 class CausalMultiHeadedAttention(nn.Module):
-        def __init__(self, d_in, d_space, context_len, num_heads, drop_rate, bias_on=False):
+        def __init__(self, d_in, d_space, context_len, num_heads, drop_rate, qkv_bias_on=False):
             super().__init__()
-            self.W_key = nn.Linear(d_in, d_space, bias_on)
-            self.W_query = nn.Linear(d_in, d_space, bias_on)
-            self.W_value = nn.Linear(d_in, d_space, bias_on)
+            self.W_key = nn.Linear(d_in, d_space, qkv_bias_on)
+            self.W_query = nn.Linear(d_in, d_space, qkv_bias_on)
+            self.W_value = nn.Linear(d_in, d_space, qkv_bias_on)
             self.W_out = nn.Linear(d_space, d_space)
             self.register_buffer('mask', triu(ones(context_len, context_len), diagonal=1))
             self.dropout = nn.Dropout(drop_rate)
@@ -149,7 +149,8 @@ class TransformerBlock(nn.Module):
                                             GPT_CONFIG_124M.get_embed_dim(),
                                             GPT_CONFIG_124M.get_context_length(),
                                             GPT_CONFIG_124M.get_n_heads(),
-                                            GPT_CONFIG_124M.get_dropout_rate())
+                                            GPT_CONFIG_124M.get_dropout_rate(),
+                                            GPT_CONFIG_124M.get_qkv_bias())
             self.l_norm_1 = LayerNorm(GPT_CONFIG_124M.get_embed_dim())
 
             self.l_norm_2 = LayerNorm(GPT_CONFIG_124M.get_embed_dim())
