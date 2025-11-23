@@ -10,7 +10,7 @@ from torch import (
 class GPTConfig124M:
     def __init__(self):
         self._vocab_size = 50257
-        self._content_length = 1024
+        self._context_length = 1024
         self._embed_dim = 768
         self._n_heads = 12
         self._n_layers = 12
@@ -23,8 +23,8 @@ class GPTConfig124M:
     def get_vocab_size(self):
         return self._vocab_size
 
-    def get_content_length(self):
-        return self._content_length
+    def get_context_length(self):
+        return self._context_length
 
     def get_embed_dim(self):
         return self._embed_dim
@@ -45,7 +45,7 @@ class GPTConfig124M:
     def to_dict(self):
         return {
             "vocab_size": self._vocab_size,
-            "content_length": self._content_length,
+            "context_length": self._context_length,
             "embed_dim": self._embed_dim,
             "n_heads": self._n_heads,
             "n_layers": self._n_layers,
@@ -141,5 +141,35 @@ class LayerNorm(nn.Module):
         x_var = var(x, dim=-1, keepdim=True, unbiased=False) 
         x_norm = (x - x_mean) / sqrt(x_var + self.eps)
         return self.scale * x_norm + self.shift
+
+class TransformerBlock(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.attn_heads = CausalMultiHeadedAttention(GPT_CONFIG_124M.get_embed_dim(), 
+                                            GPT_CONFIG_124M.get_embed_dim(),
+                                            GPT_CONFIG_124M.get_context_length(),
+                                            GPT_CONFIG_124M.get_n_heads(),
+                                            GPT_CONFIG_124M.get_dropout_rate())
+            self.l_norm_1 = LayerNorm(GPT_CONFIG_124M.get_embed_dim())
+
+            self.l_norm_2 = LayerNorm(GPT_CONFIG_124M.get_embed_dim())
+            self.feed_fwd = FeedForward(GPT_CONFIG_124M.get_embed_dim())
+
+            self.dropout_layer = nn.Dropout(GPT_CONFIG_124M.get_dropout_rate())
+        
+        def forward(self, x):
+            residual = x
+            x = self.l_norm_1(x)
+            x = self.attn_heads(x)
+            x = self.dropout_layer(x)
+            x = x + residual
+
+            residual = x
+            x = self.l_norm_2(x)
+            x = self.feed_fwd(x)
+            x = self.dropout_layer(x)
+            x = x + residual
+
+            return x
 
 GPT_CONFIG_124M = GPTConfig124M()    

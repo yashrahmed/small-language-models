@@ -11,5 +11,6 @@ from .gpt_parts import (
     FeedForward,
     GELU,
     LayerNorm,
+    TransformerBlock,
     GPT_CONFIG_124M
 )

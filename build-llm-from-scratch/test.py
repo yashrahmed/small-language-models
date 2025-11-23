@@ -1,4 +1,4 @@
-from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm, GELU, FeedForward
+from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm, GELU, FeedForward, GPT_CONFIG_124M, TransformerBlock
 
 def load_text():
     with open('verdict.txt', 'r') as book:
@@ -330,9 +330,29 @@ def try_ff_layer():
     output = FeedForward(768)(inputs)
     print(output.shape)
 
+def build_a_txfm_block():
+    import torch
+    from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand
+    
+    import matplotlib.pyplot as plt
+
+    
+
+
+    x = rand(2, 3, GPT_CONFIG_124M.get_embed_dim()) # OBviously change this
+
+    layer = TransformerBlock()
+
+    output = layer(x)
+
+    print(x.shape)
+    print(output.shape)
+
+
+
 
 if __name__ == '__main__':
-    try_ff_layer()
+    build_a_txfm_block()
     # try_layer_norm()
     # building_causal_multiheaded_attention()
     # building_causal_attention_wdropout()
