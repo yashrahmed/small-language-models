@@ -350,41 +350,50 @@ def build_a_txfm_block():
 
 def build_gpt_2():
     import torch
-    from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand, arange
+    from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand, arange, argmax, cat
     import tiktoken
-    from llm_components import GPTModel
+    from llm_components import GPTModel, generate_text_simple
 
+    manual_seed(123)
      
     tokenizer = tiktoken.encoding_for_model("gpt-2")
     
     # Sentences chosen to have exactly 10 tokens
     sentence1 = "Hello there boy! Do you like tea sir?" 
     sentence2 = "In the sunlit terraces of the palace."
+    sentence3 = "Hello, I am"
 
     batch = tensor([
-        tokenizer.encode(sentence1),
-        tokenizer.encode(sentence2)
+        # tokenizer.encode(sentence1),
+        # tokenizer.encode(sentence2),
+        tokenizer.encode(sentence3)
     ])
 
     model = GPTModel(GPT_CONFIG_124M)
     total_params = sum([p.numel() for p in model.parameters()])
-    print(total_params) # Will print 163M params which is HIGHER than 124M params. 
+    # print(total_params) # Will print 163M params which is HIGHER than 124M params. 
 
     # Both the lines end up printing torch.Size([50257, 768])
     # This is because the logit head stores weights as a transpose even though it maps from 768 dims --> 50257 dims.
     # This allows the weights to be "tied" thereby removing the need for a separate logit head which leads to ~124M params.
     # This book does not use tying.
-    print(model.tok_embed.weight.shape)
-    print(model.logit_head.weight.shape)
+    # print(model.tok_embed.weight.shape)
+    # print(model.logit_head.weight.shape)
 
-    total_size_bytes = 4 * total_params
-    total_size_mb = total_size_bytes / (1024 * 1024)
-    print(f"Total size is {total_size_mb:.2f} MB")
-
+    # total_size_bytes = 4 * total_params
+    # total_size_mb = total_size_bytes / (1024 * 1024)
+    # print(f"Total size is {total_size_mb:.2f} MB")
 
     # test_output = model(batch)
     # print(test_output.shape)
 
+    # Test the text generation here.
+
+
+    # print(batch)
+    model.eval() # Puts the model in eval mode; Different from no_grad; Some layers e.g. dropout work differently
+    output_tokens = generate_text_simple(batch, model, GPT_CONFIG_124M, 6)
+    print(tokenizer.decode(output_tokens[0, :].tolist()))
 
 
 

@@ -13,5 +13,6 @@ from .gpt_parts import (
     GELU,
     LayerNorm,
     TransformerBlock,
+    generate_text_simple,
     GPT_CONFIG_124M
 )

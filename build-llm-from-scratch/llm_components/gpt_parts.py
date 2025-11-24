@@ -1,5 +1,5 @@
 from torch import (
-    tensor, nn, softmax,
+    tensor, nn, softmax, no_grad, cat, argmax,
     triu,
     ones, zeros, arange,
     mean, var,
@@ -197,5 +197,19 @@ class TransformerBlock(nn.Module):
             x = x + residual
 
             return x
+
+def generate_text_simple(input_tokens_batch, model, config, max_new_tokens):
+
+    input_tokens_batch = input_tokens_batch[:, -config.get_context_length():] # Trim to context length
+
+    for _ in range(max_new_tokens):
+        with no_grad():
+            logits = model(input_tokens_batch)
+        logits = logits[:, -1, :] # Take ONLY the last context vector for each batch
+        probs = softmax(logits, dim=-1)
+        nxt_token_ids = argmax(probs, dim=-1, keepdim=True) # Find the index with the highest value; Keep dim allows the token ids for the whole batch to be appended to the input
+        input_tokens_batch = cat((input_tokens_batch, nxt_token_ids), dim=-1)
+    
+    return input_tokens_batch
 
 GPT_CONFIG_124M = GPTConfig()    
