@@ -78,7 +78,6 @@ class GPTModel(nn.Module):
             logits = self.logit_head(x)
             return logits
 
-
 class CausalMultiHeadedAttention(nn.Module):
         def __init__(self, d_in, d_space, context_len, num_heads, drop_rate, qkv_bias_on=False):
             super().__init__()
