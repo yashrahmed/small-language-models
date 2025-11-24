@@ -1,13 +1,13 @@
 from torch import (
     tensor, nn, softmax,
     triu,
-    ones, zeros,
+    ones, zeros, arange,
     mean, var,
     sqrt, tanh,
     inf, pi
 )
 
-class GPTConfig124M:
+class GPTConfig:
     def __init__(self):
         self._vocab_size = 50257
         self._context_length = 1024
@@ -52,6 +52,32 @@ class GPTConfig124M:
             "dropout_rate": self._dropout_rate,
             "qkv_bias": self._qkv_bias,
         }
+
+class GPTModel(nn.Module):
+        def __init__(self, model_config) -> None:
+            super().__init__()
+            self.tok_embed = nn.Embedding(model_config.get_vocab_size(), model_config.get_embed_dim())
+            self.pos_embed = nn.Embedding(model_config.get_context_length(), model_config.get_embed_dim())
+            self.main_drop = nn.Dropout(model_config.get_dropout_rate())
+
+            self.txms_blocks = nn.Sequential(*[TransformerBlock(model_config) for _ in range(model_config.get_n_layers())]) # Convert to varargs
+
+            self.main_norm = LayerNorm(model_config.get_embed_dim())
+            self.logit_head = nn.Linear(model_config.get_embed_dim(), model_config.get_vocab_size(), bias=False) # Bias removed as per GPT2 spec
+
+        def forward(self, token_batch):
+            _, seq_len = token_batch.shape
+            text_emb_op = self.tok_embed(token_batch)
+            pos_emb_op = self.pos_embed(arange(seq_len, device=token_batch.device))
+            x = text_emb_op + pos_emb_op
+            x = self.main_drop(x)
+
+            x = self.txms_blocks(x)
+
+            x = self.main_norm(x)
+            logits = self.logit_head(x)
+            return logits
+
 
 class CausalMultiHeadedAttention(nn.Module):
         def __init__(self, d_in, d_space, context_len, num_heads, drop_rate, qkv_bias_on=False):
@@ -143,20 +169,20 @@ class LayerNorm(nn.Module):
         return self.scale * x_norm + self.shift
 
 class TransformerBlock(nn.Module):
-        def __init__(self) -> None:
+        def __init__(self, model_config: GPTConfig) -> None:
             super().__init__()
-            self.attn_heads = CausalMultiHeadedAttention(GPT_CONFIG_124M.get_embed_dim(), 
-                                            GPT_CONFIG_124M.get_embed_dim(),
-                                            GPT_CONFIG_124M.get_context_length(),
-                                            GPT_CONFIG_124M.get_n_heads(),
-                                            GPT_CONFIG_124M.get_dropout_rate(),
-                                            GPT_CONFIG_124M.get_qkv_bias())
-            self.l_norm_1 = LayerNorm(GPT_CONFIG_124M.get_embed_dim())
+            self.attn_heads = CausalMultiHeadedAttention(model_config.get_embed_dim(), 
+                                            model_config.get_embed_dim(),
+                                            model_config.get_context_length(),
+                                            model_config.get_n_heads(),
+                                            model_config.get_dropout_rate(),
+                                            model_config.get_qkv_bias())
+            self.l_norm_1 = LayerNorm(model_config.get_embed_dim())
 
-            self.l_norm_2 = LayerNorm(GPT_CONFIG_124M.get_embed_dim())
-            self.feed_fwd = FeedForward(GPT_CONFIG_124M.get_embed_dim())
+            self.l_norm_2 = LayerNorm(model_config.get_embed_dim())
+            self.feed_fwd = FeedForward(model_config.get_embed_dim())
 
-            self.dropout_layer = nn.Dropout(GPT_CONFIG_124M.get_dropout_rate())
+            self.dropout_layer = nn.Dropout(model_config.get_dropout_rate())
         
         def forward(self, x):
             residual = x
@@ -173,4 +199,4 @@ class TransformerBlock(nn.Module):
 
             return x
 
-GPT_CONFIG_124M = GPTConfig124M()    
+GPT_CONFIG_124M = GPTConfig()    

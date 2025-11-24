@@ -339,20 +339,58 @@ def build_a_txfm_block():
     
 
 
-    x = rand(2, 3, GPT_CONFIG_124M.get_embed_dim()) # OBviously change this
+    x = rand(2, 3, GPT_CONFIG_124M.get_embed_dim())
 
-    layer = TransformerBlock()
+    layer = TransformerBlock(GPT_CONFIG_124M)
 
     output = layer(x)
 
     print(x.shape)
     print(output.shape)
 
+def build_gpt_2():
+    import torch
+    from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand, arange
+    import tiktoken
+    from llm_components import GPTModel
+
+     
+    tokenizer = tiktoken.encoding_for_model("gpt-2")
+    
+    # Sentences chosen to have exactly 10 tokens
+    sentence1 = "Hello there boy! Do you like tea sir?" 
+    sentence2 = "In the sunlit terraces of the palace."
+
+    batch = tensor([
+        tokenizer.encode(sentence1),
+        tokenizer.encode(sentence2)
+    ])
+
+    model = GPTModel(GPT_CONFIG_124M)
+    total_params = sum([p.numel() for p in model.parameters()])
+    print(total_params) # Will print 163M params which is HIGHER than 124M params. 
+
+    # Both the lines end up printing torch.Size([50257, 768])
+    # This is because the logit head stores weights as a transpose even though it maps from 768 dims --> 50257 dims.
+    # This allows the weights to be "tied" thereby removing the need for a separate logit head which leads to ~124M params.
+    # This book does not use tying.
+    print(model.tok_embed.weight.shape)
+    print(model.logit_head.weight.shape)
+
+    total_size_bytes = 4 * total_params
+    total_size_mb = total_size_bytes / (1024 * 1024)
+    print(f"Total size is {total_size_mb:.2f} MB")
+
+
+    # test_output = model(batch)
+    # print(test_output.shape)
+
 
 
 
 if __name__ == '__main__':
-    build_a_txfm_block()
+    build_gpt_2()
+    # build_a_txfm_block()
     # try_layer_norm()
     # building_causal_multiheaded_attention()
     # building_causal_attention_wdropout()
