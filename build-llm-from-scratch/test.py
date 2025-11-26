@@ -352,7 +352,7 @@ def build_gpt_2():
     import torch
     from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand, arange, argmax, cat
     import tiktoken
-    from llm_components import GPTModel, generate_text_simple
+    from llm_components import GPTModel, generate_text_simple, text_ids_to_tokens, token_ids_to_text
 
     manual_seed(123)
      
@@ -363,11 +363,12 @@ def build_gpt_2():
     sentence2 = "In the sunlit terraces of the palace."
     sentence3 = "Hello, I am"
 
-    batch = tensor([
-        # tokenizer.encode(sentence1),
-        # tokenizer.encode(sentence2),
-        tokenizer.encode(sentence3)
-    ])
+    # batch = tensor([
+    #     # tokenizer.encode(sentence1),
+    #     # tokenizer.encode(sentence2),
+    #     tokenizer.encode(sentence3)
+    # ])
+    batch = text_ids_to_tokens(sentence3, tokenizer)
 
     model = GPTModel(GPT_CONFIG_124M)
     total_params = sum([p.numel() for p in model.parameters()])
@@ -393,7 +394,8 @@ def build_gpt_2():
     # print(batch)
     model.eval() # Puts the model in eval mode; Different from no_grad; Some layers e.g. dropout work differently
     output_tokens = generate_text_simple(batch, model, GPT_CONFIG_124M, 6)
-    print(tokenizer.decode(output_tokens[0, :].tolist()))
+    print(token_ids_to_text(output_tokens, tokenizer))
+    # print(tokenizer.decode(output_tokens[0, :].tolist()))
 
 
 

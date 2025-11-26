@@ -14,5 +14,7 @@ from .gpt_parts import (
     LayerNorm,
     TransformerBlock,
     generate_text_simple,
+    text_ids_to_tokens,
+    token_ids_to_text,
     GPT_CONFIG_124M
 )

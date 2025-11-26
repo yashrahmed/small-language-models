@@ -212,4 +212,14 @@ def generate_text_simple(input_tokens_batch, model, config, max_new_tokens):
     
     return input_tokens_batch
 
+
+def text_ids_to_tokens(text, tokenizer):
+    return tensor(tokenizer.encode(text, allowed_special={"<|endoftext|>"})).unsqueeze(0) # Add a batch dimension of size=1
+
+
+def token_ids_to_text(token_ids, tokenizer):
+    ids = token_ids.squeeze(0).tolist() # Remove a batch dimension of size=1
+    return tokenizer.decode(ids)
+
+
 GPT_CONFIG_124M = GPTConfig()    
