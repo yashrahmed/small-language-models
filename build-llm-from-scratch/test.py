@@ -397,10 +397,85 @@ def build_gpt_2():
     print(token_ids_to_text(output_tokens, tokenizer))
     # print(tokenizer.decode(output_tokens[0, :].tolist()))
 
+def try_measure_loss():
+    import torch
+    from torch import (nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand, arange, argmax, cat,
+                       log)
+    import tiktoken
+    from llm_components import GPTModel, generate_text_simple, text_ids_to_tokens, token_ids_to_text
+    
+    
+    config = GPT_CONFIG_124M
+    config._dropout_rate = 0.1
+    config._context_length = 256
+    manual_seed(123)
+    model = GPTModel(config)
+    model.eval()
+     
+    tokenizer = tiktoken.encoding_for_model("gpt-2")
 
+    # The last words in both sentences are target words
+    # sent1_tokens = tokenizer.encode("Every effort moves you")
+    # sent2_tokens = tokenizer.encode("I really like chocolate")
+
+    # Setting tokens manually to follow along with the book.
+    sent1_tokens = [16833, 3626, 6100, 345]
+    sent2_tokens = [40, 1107, 588, 11311]
+
+    inputs = tensor([
+        sent1_tokens[:3],
+        sent2_tokens[:3]
+    ])
+
+    targets = tensor([
+        sent1_tokens[1:],
+        sent2_tokens[1:]
+    ])
+
+    # Not relevant to the topic but here is an interesting effect of BPE.
+    # Even though the second line is the last three words of the first, the token count is the same.
+    # In the second sentence, BPE splits the word "effort" in "eff" and "ort".
+    # print(tokenizer.encode("Every effort moves you")) # 4 tokens for 4 words
+    # print(tokenizer.encode("effort moves you")) # 4 tokens for 3 words.
+
+    # Run the inputs through model
+    with torch.no_grad():
+        logits = model(inputs)
+    probs = softmax(logits, dim=-1)
+    op_token_ids = argmax(probs, dim=-1, keepdim=True)
+    print(probs.shape)
+    print(op_token_ids)
+
+    # The loss to measure can be described as "Negative Average log probability of target tokens".
+    # The goal is to use Backprop (hence the need to define a loss).
+    # There isn't a need to MINIMIZE the probs of incorrect tokens as softmax takes care of that
+    # i.e. increasing the target probability automatically reduces the probs of the incorrect tokens when using softmax.
+    # The technical name for this loss in cross-entropy loss.
+    tgt_1_probs = probs[0, [0, 1, 2], targets[0]]
+    tgt_2_probs = probs[1, [0, 1, 2], targets[1]]
+    print(tgt_1_probs)
+    print(tgt_2_probs)
+
+    all_logprobs = log(cat((tgt_1_probs, tgt_2_probs)))
+    mean_logprob = mean(all_logprobs)
+    loss = -mean_logprob
+    print(loss)
+
+    # Using Torch's built in loss function.
+    loss_fn = nn.functional.cross_entropy
+    logits_flat = logits.flatten(0, 1)
+    targets_flat = targets.flatten(0, 1)
+    print(logits_flat.shape) # Shape is (N, C)
+    print(targets_flat.shape) # Shape is (N)
+    print(loss_fn(logits_flat, targets_flat))
+
+
+
+    
 
 if __name__ == '__main__':
-    build_gpt_2()
+    try_measure_loss()
+    # build_gpt_2()
     # build_a_txfm_block()
     # try_layer_norm()
     # building_causal_multiheaded_attention()
