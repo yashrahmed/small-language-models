@@ -1,7 +1,7 @@
 import re
 import tiktoken
 
-from torch import Tensor
+from torch import tensor
 from torch.utils.data import Dataset, DataLoader
 
 # Special token constants
@@ -53,8 +53,8 @@ class GPTDatasetV1(Dataset):
 
         for i in range(0, len(token_ids) - max_length, stride):
             i_max = i + max_length
-            self.input_ids.append(Tensor(token_ids[i:i_max]))
-            self.target_ids.append(Tensor(token_ids[i+1:i_max+1]))
+            self.input_ids.append(tensor(token_ids[i:i_max]))
+            self.target_ids.append(tensor(token_ids[i+1:i_max+1]))
     
     def __len__(self):
         return len(self.input_ids)
