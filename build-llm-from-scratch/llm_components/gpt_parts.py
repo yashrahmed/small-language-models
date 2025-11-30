@@ -4,8 +4,12 @@ from torch import (
     ones, zeros, arange,
     mean, var,
     sqrt, tanh,
-    inf, pi
+    inf, pi, nan,
+    device as torch_device,
 )
+from torch.utils.data import Dataset, DataLoader
+from torch.nn.functional import cross_entropy
+import tiktoken
 
 class GPTConfig:
     def __init__(self):
@@ -54,8 +58,9 @@ class GPTConfig:
         }
 
 class GPTModel(nn.Module):
-        def __init__(self, model_config) -> None:
+        def __init__(self, model_config, device=torch_device("cpu")) -> None:
             super().__init__()
+            self.device = device
             self.tok_embed = nn.Embedding(model_config.get_vocab_size(), model_config.get_embed_dim())
             self.pos_embed = nn.Embedding(model_config.get_context_length(), model_config.get_embed_dim())
             self.main_drop = nn.Dropout(model_config.get_dropout_rate())
@@ -64,6 +69,7 @@ class GPTModel(nn.Module):
 
             self.main_norm = LayerNorm(model_config.get_embed_dim())
             self.logit_head = nn.Linear(model_config.get_embed_dim(), model_config.get_vocab_size(), bias=False) # Bias removed as per GPT2 spec
+            self.to(self.device) # This is nice! Saves a lot of work by moving all the parameters to the device for you.
 
         def forward(self, token_batch):
             _, seq_len = token_batch.shape
@@ -198,6 +204,48 @@ class TransformerBlock(nn.Module):
 
             return x
 
+class GPTDatasetV1(Dataset):
+    def __init__(self, text, tokenizer, max_length, stride) -> None:
+        # Input and target ids will be a list of PyTorch Tensors
+        self.input_ids = []
+        self.target_ids = []
+        token_ids = tokenizer.encode(text)
+
+        for i in range(0, len(token_ids) - max_length, stride):
+            i_max = i + max_length
+            self.input_ids.append(tensor(token_ids[i:i_max]))
+            self.target_ids.append(tensor(token_ids[i+1:i_max+1]))
+    
+    def __len__(self):
+        return len(self.input_ids)
+    
+    def __getitem__(self, index):
+        return self.input_ids[index], self.target_ids[index]
+
+
+def calc_avg_loss_per_batch(dataloader, model, device):
+    num_batch = len(dataloader)
+    if num_batch == 0:
+        return float(nan)
+    total_loss = 0
+    for inputs_batch, target_batch in dataloader:
+        total_loss += calc_batch_loss(inputs_batch, target_batch, model, device)
+    return total_loss / num_batch
+
+
+def calc_batch_loss(inputs_batch, target_batch, model, device):
+        inputs_batch = inputs_batch.to(device)
+        target_batch = target_batch.to(device)
+        logits = model(inputs_batch)
+        return cross_entropy(logits.flatten(0, 1), target_batch.flatten(0, 1))
+
+
+def create_dataloder_v1(text, max_length=256, stride=128, batch_size=4, drop_last=True, shuffle=True, num_workers=0):
+    tokenizer = tiktoken.encoding_for_model("gpt-2")
+    dataset = GPTDatasetV1(text, tokenizer, max_length, stride) # Dataset inside a dataloader
+    return DataLoader(dataset, batch_size=batch_size, drop_last=drop_last, shuffle=shuffle, num_workers=num_workers)
+
+
 def generate_text_simple(input_tokens_batch, model, config, max_new_tokens):
 
     input_tokens_batch = input_tokens_batch[:, -config.get_context_length():] # Trim to context length
@@ -221,5 +269,5 @@ def token_ids_to_text(token_ids, tokenizer):
     ids = token_ids.squeeze(0).tolist() # Remove a batch dimension of size=1
     return tokenizer.decode(ids)
 
-
+     
 GPT_CONFIG_124M = GPTConfig()    

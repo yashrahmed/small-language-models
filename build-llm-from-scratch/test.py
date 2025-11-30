@@ -1,4 +1,4 @@
-from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm, GELU, FeedForward, GPT_CONFIG_124M, TransformerBlock
+from llm_components import VocabBuilder, SimpleTokenizer, END_OF_TEXT_TOKEN, CausalMultiHeadedAttention, LayerNorm, GELU, FeedForward, GPT_CONFIG_124M, TransformerBlock, create_dataloder_v1
 
 def load_text():
     with open('verdict.txt', 'r') as book:
@@ -469,12 +469,51 @@ def try_measure_loss():
     print(targets_flat.shape) # Shape is (N)
     print(loss_fn(logits_flat, targets_flat))
 
+def try_measure_dataset_loss():
+    from torch import manual_seed, device
+    from llm_components import GPTModel, calc_batch_loss, calc_avg_loss_per_batch
+
+    apple_metal_device = device("mps")
+
+    # Tweak config for this example.
+    config = GPT_CONFIG_124M
+    config._dropout_rate = 0.1
+    config._context_length = 256
+    manual_seed(123)
+    model = GPTModel(config, device=apple_metal_device)
+    model.eval()
+
+    # Read the text from the file
+    with open('verdict.txt') as txt_file:
+        raw_text = txt_file.read()
+    
+    # Split the raw text directly into train and validation set.
+    token_split_idx = int(len(raw_text) * 0.9) # train/validation split of 90/10
+    train_dataloader = create_dataloder_v1(raw_text[:token_split_idx], batch_size=2, max_length=config.get_context_length(), stride=config.get_context_length(),
+                                           drop_last=True, shuffle=True, num_workers=0)
+    test_dataloader = create_dataloder_v1(raw_text[token_split_idx:], batch_size=2, max_length=config.get_context_length(), stride=config.get_context_length(),
+                                        drop_last=True, shuffle=True, num_workers=0)
+    
+    
+    # print("Training data")
+    # for inputs, targets in train_dataloader:
+    #     print(inputs.shape, targets.shape)
+
+    # print("Test data")
+    # for inputs, targets in test_dataloader:
+    #     print(inputs.shape, targets.shape)
+
+    print("Training loss (Avg per batch)")
+    print(calc_avg_loss_per_batch(train_dataloader, model, apple_metal_device))
+    print("Validation loss (Avg per batch)")
+    print(calc_avg_loss_per_batch(test_dataloader, model, apple_metal_device))
 
 
     
 
 if __name__ == '__main__':
-    try_measure_loss()
+    try_measure_dataset_loss()
+    # try_measure_loss()
     # build_gpt_2()
     # build_a_txfm_block()
     # try_layer_norm()
