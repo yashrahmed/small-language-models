@@ -245,9 +245,9 @@ def create_dataloder_v1(text, max_length=256, stride=128, batch_size=4, drop_las
     dataset = GPTDatasetV1(text, tokenizer, max_length, stride) # Dataset inside a dataloader
     return DataLoader(dataset, batch_size=batch_size, drop_last=drop_last, shuffle=shuffle, num_workers=num_workers)
 
-def generate_text_simple(input_tokens_batch, model, config, max_new_tokens):
+def generate_text_simple(input_tokens_batch, model, config, max_new_tokens, device=torch_device("cpu")):
 
-    input_tokens_batch = input_tokens_batch[:, -config.get_context_length():] # Trim to context length
+    input_tokens_batch = input_tokens_batch[:, -config.get_context_length():].to(device) # Trim to context length
 
     for _ in range(max_new_tokens):
         with no_grad():
@@ -265,5 +265,35 @@ def text_ids_to_tokens(text, tokenizer):
 def token_ids_to_text(token_ids, tokenizer):
     ids = token_ids.squeeze(0).tolist() # Remove a batch dimension of size=1
     return tokenizer.decode(ids)
-  
+
+def train_model_simple(model, optimizer, train_dataloader, val_dataloader, device, num_epochs, eval_batch_interval=5, eval_batch_size=5, verbose=False):
+        num_tokens_seen_log, train_loss_log, val_loss_log = [], [], []
+        num_tokens_seen = 0
+
+        step_num = 0
+        # The inner loop
+        for i in range(num_epochs):
+            if verbose: print('_______')
+            model.train()
+            for (input_batch, target_batch) in train_dataloader:
+                optimizer.zero_grad()
+                loss = calc_batch_loss(input_batch, target_batch, model, device)
+                loss.backward()
+                optimizer.step()
+                num_tokens_seen += input_batch.numel()
+                if step_num % eval_batch_interval == 0: # Eval every 5 steps
+                    model.eval()
+                    with no_grad():
+                        train_loss = calc_avg_loss_per_batch(train_dataloader, model, device, eval_batch_size)
+                        val_loss = calc_avg_loss_per_batch(val_dataloader, model, device, eval_batch_size)
+                        num_tokens_seen_log.append(num_tokens_seen)
+                        train_loss_log.append(train_loss)
+                        val_loss_log.append(val_loss_log)
+                        if verbose: print(f"Tokens seen = {num_tokens_seen} | Train loss = {train_loss} | Validation loss = {val_loss} | Epoch={i} | stepNum = {step_num}")
+                        # print(generate_text_simple(s))
+                    model.train()
+                step_num += 1
+        
+        return num_tokens_seen, train_loss_log, val_loss_log
+
 GPT_CONFIG_124M = GPTConfig()    

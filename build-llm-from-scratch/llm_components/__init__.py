@@ -18,5 +18,6 @@ from .gpt_parts import (
     generate_text_simple,
     text_ids_to_tokens,
     token_ids_to_text,
+    train_model_simple,
     GPT_CONFIG_124M
 )

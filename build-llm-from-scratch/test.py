@@ -509,9 +509,58 @@ def try_measure_dataset_loss():
     print(calc_avg_loss_per_batch(test_dataloader, model, apple_metal_device, num_batches=5))
 
 
+def trying_out_a_train_loop():
+    from torch import manual_seed, device
+    from torch.optim import AdamW
+    from llm_components import GPTModel, train_model_simple, generate_text_simple, text_ids_to_tokens, token_ids_to_text
+    import tiktoken
+
+    apple_metal_device = device("mps")
+    config = GPT_CONFIG_124M
+    config._context_length = 256
+    # Tweak config for this example.
+    manual_seed(123)
+
+    tokenizer = tiktoken.encoding_for_model("gpt-2")
+
+    with open('verdict.txt') as txt_file:
+        raw_text = txt_file.read()
+
+    
+    # Split the raw text directly into train and validation set.
+    token_split_idx = int(len(raw_text) * 0.9) # train/validation split of 90/10
+    train_dataloader = create_dataloder_v1(raw_text[:token_split_idx], batch_size=2, max_length=config.get_context_length(), stride=config.get_context_length(),
+                                           drop_last=True, shuffle=True, num_workers=0)
+    test_dataloader = create_dataloder_v1(raw_text[token_split_idx:], batch_size=2, max_length=config.get_context_length(), stride=config.get_context_length(),
+                                        drop_last=True, shuffle=True, num_workers=0)
+    
+
+    
+
+    start_str = "Every effort moves you"
+    start_str_token_ids = text_ids_to_tokens(start_str, tokenizer)
+    
+    # Optimizer and modelsetup
+    model = GPTModel(config, device=apple_metal_device)
+    optimizer = AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
+    num_epochs = 10
+
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, apple_metal_device)
+    print(token_ids_to_text(gen_text_tokenids, tokenizer))
+
+    train_model_simple(model, optimizer, train_dataloader, test_dataloader, apple_metal_device, num_epochs)
+
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, apple_metal_device)
+    print(token_ids_to_text(gen_text_tokenids, tokenizer))
+
+    
+
+    
+
 
 if __name__ == '__main__':
-    try_measure_dataset_loss()
+    trying_out_a_train_loop()
+    # try_measure_dataset_loss()
     # try_measure_loss()
     # build_gpt_2()
     # build_a_txfm_block()
