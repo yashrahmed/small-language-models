@@ -223,14 +223,16 @@ class GPTDatasetV1(Dataset):
         return self.input_ids[index], self.target_ids[index]
 
 
-def calc_avg_loss_per_batch(dataloader, model, device):
-    num_batch = len(dataloader)
-    if num_batch == 0:
+def calc_avg_loss_per_batch(dataloader, model, device, num_batches):
+    if not num_batches or num_batches < 0:
         return float(nan)
+    num_batches = min(int(num_batches), len(dataloader))
     total_loss = 0
-    for inputs_batch, target_batch in dataloader:
+    for i, (inputs_batch, target_batch) in enumerate(dataloader):
+        if i == num_batches:
+            break
         total_loss += calc_batch_loss(inputs_batch, target_batch, model, device)
-    return total_loss / num_batch
+    return total_loss / num_batches
 
 def calc_batch_loss(inputs_batch, target_batch, model, device):
         inputs_batch = inputs_batch.to(device)

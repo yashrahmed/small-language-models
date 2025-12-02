@@ -504,12 +504,11 @@ def try_measure_dataset_loss():
     #     print(inputs.shape, targets.shape)
 
     print("Training loss (Avg per batch)")
-    print(calc_avg_loss_per_batch(train_dataloader, model, apple_metal_device))
+    print(calc_avg_loss_per_batch(train_dataloader, model, apple_metal_device, num_batches=15))
     print("Validation loss (Avg per batch)")
-    print(calc_avg_loss_per_batch(test_dataloader, model, apple_metal_device))
+    print(calc_avg_loss_per_batch(test_dataloader, model, apple_metal_device, num_batches=5))
 
 
-    
 
 if __name__ == '__main__':
     try_measure_dataset_loss()
