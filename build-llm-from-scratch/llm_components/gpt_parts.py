@@ -232,19 +232,16 @@ def calc_avg_loss_per_batch(dataloader, model, device):
         total_loss += calc_batch_loss(inputs_batch, target_batch, model, device)
     return total_loss / num_batch
 
-
 def calc_batch_loss(inputs_batch, target_batch, model, device):
         inputs_batch = inputs_batch.to(device)
         target_batch = target_batch.to(device)
         logits = model(inputs_batch)
         return cross_entropy(logits.flatten(0, 1), target_batch.flatten(0, 1))
 
-
 def create_dataloder_v1(text, max_length=256, stride=128, batch_size=4, drop_last=True, shuffle=True, num_workers=0):
     tokenizer = tiktoken.encoding_for_model("gpt-2")
     dataset = GPTDatasetV1(text, tokenizer, max_length, stride) # Dataset inside a dataloader
     return DataLoader(dataset, batch_size=batch_size, drop_last=drop_last, shuffle=shuffle, num_workers=num_workers)
-
 
 def generate_text_simple(input_tokens_batch, model, config, max_new_tokens):
 
@@ -260,14 +257,11 @@ def generate_text_simple(input_tokens_batch, model, config, max_new_tokens):
     
     return input_tokens_batch
 
-
 def text_ids_to_tokens(text, tokenizer):
     return tensor(tokenizer.encode(text, allowed_special={"<|endoftext|>"})).unsqueeze(0) # Add a batch dimension of size=1
-
 
 def token_ids_to_text(token_ids, tokenizer):
     ids = token_ids.squeeze(0).tolist() # Remove a batch dimension of size=1
     return tokenizer.decode(ids)
-
-     
+  
 GPT_CONFIG_124M = GPTConfig()    
