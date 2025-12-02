@@ -512,7 +512,7 @@ def try_measure_dataset_loss():
 def trying_out_a_train_loop():
     from torch import manual_seed, device
     from torch.optim import AdamW
-    from llm_components import GPTModel, train_model_simple, generate_text_simple, text_ids_to_tokens, token_ids_to_text
+    from llm_components import GPTModel, train_model_simple, generate_text_simple, generate_text, text_ids_to_tokens, token_ids_to_text
     import tiktoken
 
     apple_metal_device = device("mps")
@@ -551,6 +551,9 @@ def trying_out_a_train_loop():
     train_model_simple(model, optimizer, train_dataloader, test_dataloader, apple_metal_device, num_epochs)
 
     gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, apple_metal_device)
+    print(token_ids_to_text(gen_text_tokenids, tokenizer))
+
+    gen_text_tokenids = generate_text(start_str_token_ids, model, config, 10, device=apple_metal_device, top_k=25, temp=1.5)
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
     

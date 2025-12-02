@@ -1,7 +1,7 @@
 from torch import (
-    tensor, nn, softmax, no_grad, cat, argmax,
+    tensor, nn, softmax, no_grad, cat, argmax, topk, multinomial,
     triu,
-    ones, zeros, arange,
+    ones, zeros, arange, where,
     mean, var,
     sqrt, tanh,
     inf, pi, nan,
@@ -245,6 +245,37 @@ def create_dataloder_v1(text, max_length=256, stride=128, batch_size=4, drop_las
     dataset = GPTDatasetV1(text, tokenizer, max_length, stride) # Dataset inside a dataloader
     return DataLoader(dataset, batch_size=batch_size, drop_last=drop_last, shuffle=shuffle, num_workers=num_workers)
 
+def generate_text(input_tokens_batch, model, config, max_new_tokens, top_k=25, temp=1.0, device=torch_device("cpu")):
+
+    input_tokens_batch = input_tokens_batch[:, -config.get_context_length():].to(device) # Trim to context length
+
+    for _ in range(max_new_tokens):
+
+        # Generate the logits for the context vector and then 
+        with no_grad():
+            logits = model(input_tokens_batch)
+        logits = logits[:, -1, :] # Take ONLY the last context vector for each batch
+
+        if top_k and top_k > 0:
+            # Apply the top_k sampling if applicable
+            # Keep the topk logits and set the others to -inf before softmax
+            top_k_logits, _ = topk(logits, top_k, dim=-1) # Apply topk to the output embedding dims (size ~50K).
+            min_topk_val = top_k_logits[:, -1] # topk sorts the values in descending order. The last column will have the minimum values.
+            logits = where(logits < min_topk_val, tensor(float(-inf)).to(device), logits) # Logits and min_topk_val fitted to each other via broadcasting.
+
+        # Apply temperature scaling if applicable and then apply softmax
+        if temp and temp > 0.0:
+            logits /= temp
+            probs = softmax(logits, dim=-1)
+            nxt_token_ids = multinomial(probs, num_samples=1)
+        else: # or apply argmax as usual
+            probs = softmax(logits, dim=-1) # This step isn't necessary for argmax.
+            nxt_token_ids = argmax(probs, dim=-1, keepdim=True) # Find the index with the highest value; Keep dim allows the token ids for the whole batch to be appended to the input
+        # @ToDo - add EOS (end of sequence stop condition)
+        input_tokens_batch = cat((input_tokens_batch, nxt_token_ids), dim=-1)
+    
+    return input_tokens_batch
+
 def generate_text_simple(input_tokens_batch, model, config, max_new_tokens, device=torch_device("cpu")):
 
     input_tokens_batch = input_tokens_batch[:, -config.get_context_length():].to(device) # Trim to context length
@@ -281,7 +312,7 @@ def train_model_simple(model, optimizer, train_dataloader, val_dataloader, devic
                 loss.backward()
                 optimizer.step()
                 num_tokens_seen += input_batch.numel()
-                if step_num % eval_batch_interval == 0: # Eval every 5 steps
+                if step_num % eval_batch_interval == 0: # Eval every {eval_batch_interval} steps
                     model.eval()
                     with no_grad():
                         train_loss = calc_avg_loss_per_batch(train_dataloader, model, device, eval_batch_size)
@@ -290,7 +321,6 @@ def train_model_simple(model, optimizer, train_dataloader, val_dataloader, devic
                         train_loss_log.append(train_loss)
                         val_loss_log.append(val_loss_log)
                         if verbose: print(f"Tokens seen = {num_tokens_seen} | Train loss = {train_loss} | Validation loss = {val_loss} | Epoch={i} | stepNum = {step_num}")
-                        # print(generate_text_simple(s))
                     model.train()
                 step_num += 1
         

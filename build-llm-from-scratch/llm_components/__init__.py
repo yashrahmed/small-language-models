@@ -15,6 +15,7 @@ from .gpt_parts import (
     create_dataloder_v1,
     calc_avg_loss_per_batch,
     calc_batch_loss,
+    generate_text,
     generate_text_simple,
     text_ids_to_tokens,
     token_ids_to_text,
