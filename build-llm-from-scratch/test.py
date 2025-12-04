@@ -545,17 +545,14 @@ def trying_out_a_train_loop_with_ckpt():
     optimizer = AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
     num_epochs = 50
 
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, apple_metal_device)
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, device=apple_metal_device, model_type="custom")
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
     train_model_simple(model, optimizer, train_dataloader, test_dataloader, apple_metal_device, num_epochs)
 
     model.eval()
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, apple_metal_device)
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, device=apple_metal_device, model_type="custom")
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
-
-    # gen_text_tokenids = generate_text(start_str_token_ids, model, config, 10, device=apple_metal_device, top_k=25, temp=1.5)
-    # print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
     model.train() # Put in train mode so that the ALL states are saved. This is required if the model needs more training 
     print("......Saving Checkpoints......")
@@ -570,7 +567,7 @@ def trying_out_a_train_loop_with_ckpt():
     saved_model.load_state_dict(model_checkpoint)
 
     saved_model.eval()
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, saved_model, config, 10, device=apple_metal_device)
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, device=apple_metal_device, model_type="custom")
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
 def try_loading_a_checkpoint():
