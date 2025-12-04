@@ -1,6 +1,8 @@
 from .utils import (
     SimpleTokenizer,
     VocabBuilder,
+    download_and_load_gpt2,
+    load_gpt2_params_from_tf_ckpt,
     END_OF_TEXT_TOKEN,
     UNK_TOKEN
 )

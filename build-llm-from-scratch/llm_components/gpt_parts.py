@@ -90,7 +90,7 @@ class CausalMultiHeadedAttention(nn.Module):
             self.W_key = nn.Linear(d_in, d_space, qkv_bias_on)
             self.W_query = nn.Linear(d_in, d_space, qkv_bias_on)
             self.W_value = nn.Linear(d_in, d_space, qkv_bias_on)
-            self.W_out = nn.Linear(d_space, d_space)
+            self.out_proj = nn.Linear(d_space, d_space)
             self.register_buffer('mask', triu(ones(context_len, context_len), diagonal=1))
             self.dropout = nn.Dropout(drop_rate)
             self.head_dim = d_space // num_heads
@@ -137,7 +137,7 @@ class CausalMultiHeadedAttention(nn.Module):
             # But for multiheaded attention, one last matrix multiply is required.
             # Think of it like a weighting sum layer for all the value vectors
             # a.k.a. remixing cross head interactions.
-            return self.W_out(context_vec)
+            return self.out_proj(context_vec)
 
 class FeedForward(nn.Module):
         def __init__(self, dims):
@@ -176,7 +176,7 @@ class LayerNorm(nn.Module):
 class TransformerBlock(nn.Module):
         def __init__(self, model_config: GPTConfig) -> None:
             super().__init__()
-            self.attn_heads = CausalMultiHeadedAttention(model_config.get_embed_dim(), 
+            self.attn_head = CausalMultiHeadedAttention(model_config.get_embed_dim(), 
                                             model_config.get_embed_dim(),
                                             model_config.get_context_length(),
                                             model_config.get_n_heads(),
@@ -192,7 +192,7 @@ class TransformerBlock(nn.Module):
         def forward(self, x):
             residual = x
             x = self.l_norm_1(x)
-            x = self.attn_heads(x)
+            x = self.attn_head(x)
             x = self.dropout_layer(x)
             x = x + residual
 
@@ -278,11 +278,12 @@ def generate_text(input_tokens_batch, model, config, max_new_tokens, top_k=25, t
 
 def generate_text_simple(input_tokens_batch, model, config, max_new_tokens, device=torch_device("cpu")):
 
-    input_tokens_batch = input_tokens_batch[:, -config.get_context_length():].to(device) # Trim to context length
+    input_tokens_batch = input_tokens_batch.to(device) # Trim to context length
 
     for _ in range(max_new_tokens):
+        cropped_tokens = input_tokens_batch[:, -config.get_context_length():]
         with no_grad():
-            logits = model(input_tokens_batch)
+            logits = model(cropped_tokens)
         logits = logits[:, -1, :] # Take ONLY the last context vector for each batch
         probs = softmax(logits, dim=-1)
         nxt_token_ids = argmax(probs, dim=-1, keepdim=True) # Find the index with the highest value; Keep dim allows the token ids for the whole batch to be appended to the input
