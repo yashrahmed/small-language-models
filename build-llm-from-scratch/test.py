@@ -598,85 +598,15 @@ def try_loading_a_checkpoint():
     saved_model.eval()
     gen_text_tokenids = generate_text_simple(start_str_token_ids, saved_model, config, 10, device=apple_metal_device)
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
-    
-
-def load_weights_into_gpt(gpt: GPTModel, params):
-    import torch, numpy as np
-    def assign(left, right):
-        if left.shape != right.shape:
-            raise ValueError(f"Shape mismatch. Left: {left.shape}, Right: {right.shape}")
-        return torch.nn.Parameter(torch.tensor(right))
-    
-    gpt.pos_embed.weight = assign(gpt.pos_embed.weight, params['wpe'])
-    gpt.tok_embed.weight = assign(gpt.tok_embed.weight, params['wte'])
-    
-    for b in range(len(params["blocks"])):
-        q_w, k_w, v_w = np.split(
-            (params["blocks"][b]["attn"]["c_attn"])["w"], 3, axis=-1)
-        gpt.txms_blocks[b].attn_head.W_query.weight = assign(
-            gpt.txms_blocks[b].attn_head.W_query.weight, q_w.T)
-        gpt.txms_blocks[b].attn_head.W_key.weight = assign(
-            gpt.txms_blocks[b].attn_head.W_key.weight, k_w.T)
-        gpt.txms_blocks[b].attn_head.W_value.weight = assign(
-            gpt.txms_blocks[b].attn_head.W_value.weight, v_w.T)
-
-        q_b, k_b, v_b = np.split(
-            (params["blocks"][b]["attn"]["c_attn"])["b"], 3, axis=-1)
-        gpt.txms_blocks[b].attn_head.W_query.bias = assign(
-            gpt.txms_blocks[b].attn_head.W_query.bias, q_b)
-        gpt.txms_blocks[b].attn_head.W_key.bias = assign(
-            gpt.txms_blocks[b].attn_head.W_key.bias, k_b)
-        gpt.txms_blocks[b].attn_head.W_value.bias = assign(
-            gpt.txms_blocks[b].attn_head.W_value.bias, v_b)
-
-        gpt.txms_blocks[b].attn_head.out_proj.weight = assign(
-            gpt.txms_blocks[b].attn_head.out_proj.weight, 
-            params["blocks"][b]["attn"]["c_proj"]["w"].T)
-        gpt.txms_blocks[b].attn_head.out_proj.bias = assign(
-            gpt.txms_blocks[b].attn_head.out_proj.bias, 
-            params["blocks"][b]["attn"]["c_proj"]["b"])
-
-        gpt.txms_blocks[b].feed_fwd.layers[0].weight = assign(
-            gpt.txms_blocks[b].feed_fwd.layers[0].weight, 
-            params["blocks"][b]["mlp"]["c_fc"]["w"].T)
-        gpt.txms_blocks[b].feed_fwd.layers[0].bias = assign(
-            gpt.txms_blocks[b].feed_fwd.layers[0].bias, 
-            params["blocks"][b]["mlp"]["c_fc"]["b"])
-        gpt.txms_blocks[b].feed_fwd.layers[2].weight = assign(
-            gpt.txms_blocks[b].feed_fwd.layers[2].weight, 
-            params["blocks"][b]["mlp"]["c_proj"]["w"].T)
-        gpt.txms_blocks[b].feed_fwd.layers[2].bias = assign(
-            gpt.txms_blocks[b].feed_fwd.layers[2].bias, 
-            params["blocks"][b]["mlp"]["c_proj"]["b"])
-
-        gpt.txms_blocks[b].l_norm_1.scale = assign(
-            gpt.txms_blocks[b].l_norm_1.scale, 
-            params["blocks"][b]["ln_1"]["g"])
-        gpt.txms_blocks[b].l_norm_1.shift = assign(
-            gpt.txms_blocks[b].l_norm_1.shift, 
-            params["blocks"][b]["ln_1"]["b"])
-        gpt.txms_blocks[b].l_norm_2.scale = assign(
-            gpt.txms_blocks[b].l_norm_2.scale, 
-            params["blocks"][b]["ln_2"]["g"])
-        gpt.txms_blocks[b].l_norm_2.shift = assign(
-            gpt.txms_blocks[b].l_norm_2.shift, 
-            params["blocks"][b]["ln_2"]["b"])
-
-    gpt.main_norm.scale = assign(gpt.main_norm.scale, params["g"])
-    gpt.main_norm.shift = assign(gpt.main_norm.shift, params["b"])
-    gpt.logit_head.weight = assign(gpt.logit_head.weight, params["wte"])
-
 
 def try_download_gpt2():
-    from torch import device, as_tensor, tensor, nn, manual_seed, no_grad
+    from torch import device, tensor, nn, manual_seed
+    from transformers import GPT2LMHeadModel, GPT2Tokenizer
     from llm_components import (
             GPTModel, generate_text_simple, generate_text,
             text_ids_to_tokens, token_ids_to_text,
             download_and_load_gpt2, load_gpt2_params_from_tf_ckpt, GPT_CONFIG_124M)
     import tiktoken
-    import numpy as np
-    import json
-    import os
 
     def assign_from_src(target, source, prop_name):
         tgt_prop = getattr(target, prop_name)
@@ -684,111 +614,30 @@ def try_download_gpt2():
         setattr(target, prop_name, nn.Parameter(tensor(source)))
 
     # The following three lines only need to run once for the download.
-    model_size="124M"
-    models_dir="./checkpoints/gpt2"
-    
+    # model_size="124M"
+    # models_dir="./checkpoints/gpt2"
     # settings, params = download_and_load_gpt2(model_size, models_dir)
-    # print(settings)
-    # print(params.keys())
 
-    settings = json.load(open(os.path.join(models_dir, model_size, "hparams.json"), "r", encoding="utf-8"))
-    params = load_gpt2_params_from_tf_ckpt(os.path.join(models_dir, model_size, "model.ckpt"), settings) # model.ckpt does not exist but internally will be linked to ckpt.data-.....
+    # settings = json.load(open(os.path.join(models_dir, model_size, "hparams.json"), "r", encoding="utf-8"))
+    # params = load_gpt2_params_from_tf_ckpt(os.path.join(models_dir, model_size, "model.ckpt"), settings) # model.ckpt does not exist but internally will be linked to ckpt.data-.....
 
-    apple_metal_device = device('cpu')
+    apple_metal_device = device('mps')
     tokenizer = tiktoken.encoding_for_model('gpt-2')
 
     config = GPT_CONFIG_124M
     config._qkv_bias= True # GPT 2 use biases on Query, key and value matrices. This was stopped in subsequent models.
     manual_seed(123)
 
-    gpt_model = GPTModel(config) # Keep model in CPU for now
-    gpt_model.eval()
+    gpt_hf = GPT2LMHeadModel.from_pretrained("openai-community/gpt2", cache_dir="./checkpoints")
+    gpt_hf.eval()
+    gpt_hf = gpt_hf.to(apple_metal_device)
 
-    PROP_WEIGHT = "weight"
-    PROP_BIAS = "bias"
-    PROP_SCALE = "scale"
-    PROP_SHIFT = "shift"
+    start_str = "Every effort moves you towards a goal. But bear in mind"
 
-    # # Loading procedure starts here.
-    # # Step 1 - Assign pos and token embedding weights.
-    # assign_from_src(gpt_model.pos_embed, params['wpe'], PROP_WEIGHT)
-    # assign_from_src(gpt_model.tok_embed, params['wte'], PROP_WEIGHT)
-
-    # # Step 2 - Assign the weights for the output head and the final norm
-    # assign_from_src(gpt_model.logit_head, params["wte"], PROP_WEIGHT) # Same as token embedding as the orginal GPT 2 used weight tying.
-    # assign_from_src(gpt_model.main_norm, params["g"], PROP_SCALE)
-    # assign_from_src(gpt_model.main_norm, params["b"], PROP_SHIFT)
-    
-    # # Step 3 - Assign the weights to the transformer blocks.
-    # """
-    # A txfrmer block is made of the following blocks
-    # layer norm ---> CMHA (Q, K, V with biases for gpt2, out_proj_head) --> dropout -----> layer norm --> FF (2 linear layers) --> dropout ---->
-    # ________________________________________________________________________________^ |_____________________________________________________^
-    # """
-    # for i, block in enumerate(params["blocks"]):
-    #     # Each block has the following keys dict_keys(['attn', 'ln_1', 'ln_2', 'mlp'])
-    #     # Each "attn" el in turn has the following keys dict_keys(['c_attn', 'c_proj'])
-    #     # In turn c_attn and c_proj have the following keys dict_keys(['b', 'w'])
-       
-    #     # Each mlp has the following keys dict_keys(['c_fc', 'c_proj'])
-    #     # Each ln layer has the following keys dict_keys(['b', 'g'])
-    #     # c_attn needs to be split into Q, K and V
-    #     tgt_txfm_block: TransformerBlock = gpt_model.txms_blocks[i]
-
-    #     ### Assign attention head params
-    #     # Split into Q, K and V weights and assign
-    #     qw, kw, vw = np.split(block['attn']['c_attn']['w'], 3, axis=-1)
-    #     assign_from_src(tgt_txfm_block.attn_head.W_query, qw.T, PROP_WEIGHT)
-    #     assign_from_src(tgt_txfm_block.attn_head.W_key, kw.T, PROP_WEIGHT)
-    #     assign_from_src(tgt_txfm_block.attn_head.W_value, vw.T, PROP_WEIGHT)
-
-    #     # Split into Q, K and V biases and assign
-    #     qb, kb, vb = np.split(block['attn']['c_attn']['b'], 3, axis=-1)
-    #     assign_from_src(tgt_txfm_block.attn_head.W_query, qb, PROP_BIAS)
-    #     assign_from_src(tgt_txfm_block.attn_head.W_key, kb, PROP_BIAS)
-    #     assign_from_src(tgt_txfm_block.attn_head.W_value, vb, PROP_BIAS)
-
-    #     # assign out proj weights
-    #     ow = block['attn']['c_proj']['w']
-    #     assign_from_src(tgt_txfm_block.attn_head.W_out, ow.T, PROP_WEIGHT)
-
-    #     # assign out proj bias
-    #     ob = block['attn']['c_proj']['b']
-    #     assign_from_src(tgt_txfm_block.attn_head.W_out, ob, PROP_BIAS)
-
-    #     ### Assign feed_fwd params
-    #     # assign feed fwd weights on the input layer
-    #     ff_fcw = block['mlp']['c_fc']['w']
-    #     assign_from_src(tgt_txfm_block.feed_fwd.layers[0], ff_fcw.T, PROP_WEIGHT)
-
-    #     # assign feed fwd bias on the input layer
-    #     ff_fcb = block['mlp']['c_fc']['b']
-    #     assign_from_src(tgt_txfm_block.feed_fwd.layers[0], ff_fcb, PROP_BIAS)
-
-    #      # assign feed fwd weights on the output layer
-    #     ff_fpjw = block['mlp']['c_proj']['w']
-    #     assign_from_src(tgt_txfm_block.feed_fwd.layers[2], ff_fpjw.T, PROP_WEIGHT)
-
-    #     # assign feed fwd bias on the output layer
-    #     ff_fpjb = block['mlp']['c_proj']['b']
-    #     assign_from_src(tgt_txfm_block.feed_fwd.layers[2], ff_fpjb, PROP_BIAS)
-
-    #     ### Assign Layer norm params.
-    #     lnorm_1 = block['ln_1']
-    #     assign_from_src(tgt_txfm_block.l_norm_1, lnorm_1['g'], PROP_SCALE)
-    #     assign_from_src(tgt_txfm_block.l_norm_1, lnorm_1['b'], PROP_SHIFT)
-
-    #     lnorm_2 = block['ln_2']
-    #     assign_from_src(tgt_txfm_block.l_norm_2, lnorm_2['g'], PROP_SCALE)
-    #     assign_from_src(tgt_txfm_block.l_norm_2, lnorm_2['b'], PROP_SHIFT)
-
-    load_weights_into_gpt(gpt_model, params)
-    # gpt_model = gpt_model.to(apple_metal_device)
-
-    start_str = "Every effort moves you"
     start_str_token_ids = text_ids_to_tokens(start_str, tokenizer)
+    # gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_hf, config, 25, device=apple_metal_device)
+    gen_text_tokenids = generate_text(start_str_token_ids, gpt_hf, config, 25, device=apple_metal_device, top_k=25, temp=1.5)
 
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_model, config, 10)
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
 
 

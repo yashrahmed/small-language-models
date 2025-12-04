@@ -245,15 +245,16 @@ def create_dataloder_v1(text, max_length=256, stride=128, batch_size=4, drop_las
     dataset = GPTDatasetV1(text, tokenizer, max_length, stride) # Dataset inside a dataloader
     return DataLoader(dataset, batch_size=batch_size, drop_last=drop_last, shuffle=shuffle, num_workers=num_workers)
 
-def generate_text(input_tokens_batch, model, config, max_new_tokens, top_k=25, temp=1.0, device=torch_device("cpu")):
-
-    input_tokens_batch = input_tokens_batch[:, -config.get_context_length():].to(device) # Trim to context length
+def generate_text(input_tokens_batch, model, config, max_new_tokens, top_k=25, temp=1.0, model_type="hf", device=torch_device("cpu")):
+    # Set model type to hf when using hugging face model
+    input_tokens_batch = input_tokens_batch.to(device) # Trim to context length
 
     for _ in range(max_new_tokens):
-
+        cropped_tokens = input_tokens_batch[:, -config.get_context_length():]
         # Generate the logits for the context vector and then 
         with no_grad():
-            logits = model(input_tokens_batch)
+            logits = model(cropped_tokens)
+            logits = logits.logits if model_type == "hf" else logits
         logits = logits[:, -1, :] # Take ONLY the last context vector for each batch
 
         if top_k and top_k > 0:
@@ -276,7 +277,7 @@ def generate_text(input_tokens_batch, model, config, max_new_tokens, top_k=25, t
     
     return input_tokens_batch
 
-def generate_text_simple(input_tokens_batch, model, config, max_new_tokens, device=torch_device("cpu")):
+def generate_text_simple(input_tokens_batch, model, config, max_new_tokens, model_type="hf", device=torch_device("cpu")):
 
     input_tokens_batch = input_tokens_batch.to(device) # Trim to context length
 
@@ -284,6 +285,8 @@ def generate_text_simple(input_tokens_batch, model, config, max_new_tokens, devi
         cropped_tokens = input_tokens_batch[:, -config.get_context_length():]
         with no_grad():
             logits = model(cropped_tokens)
+            logits = logits.logits if model_type == "hf" else logits
+
         logits = logits[:, -1, :] # Take ONLY the last context vector for each batch
         probs = softmax(logits, dim=-1)
         nxt_token_ids = argmax(probs, dim=-1, keepdim=True) # Find the index with the highest value; Keep dim allows the token ids for the whole batch to be appended to the input
