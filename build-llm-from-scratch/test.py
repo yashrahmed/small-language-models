@@ -6,6 +6,7 @@ def load_text():
         return text
 
 def test_custom_tokenizer():
+    text = load_text()
     # tokens = tokenize(text)
     # print(tokens[:50])
     v_builder = VocabBuilder()
@@ -508,9 +509,8 @@ def try_measure_dataset_loss():
     print("Validation loss (Avg per batch)")
     print(calc_avg_loss_per_batch(test_dataloader, model, apple_metal_device, num_batches=5))
 
-
-def trying_out_a_train_loop():
-    from torch import manual_seed, device
+def trying_out_a_train_loop_with_ckpt():
+    from torch import manual_seed, device, save, load
     from torch.optim import AdamW
     from llm_components import GPTModel, train_model_simple, generate_text_simple, generate_text, text_ids_to_tokens, token_ids_to_text
     import tiktoken
@@ -543,26 +543,68 @@ def trying_out_a_train_loop():
     # Optimizer and modelsetup
     model = GPTModel(config, device=apple_metal_device)
     optimizer = AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
-    num_epochs = 10
+    num_epochs = 50
 
     gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, apple_metal_device)
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
     train_model_simple(model, optimizer, train_dataloader, test_dataloader, apple_metal_device, num_epochs)
 
+    model.eval()
     gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, apple_metal_device)
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
-    gen_text_tokenids = generate_text(start_str_token_ids, model, config, 10, device=apple_metal_device, top_k=25, temp=1.5)
+    # gen_text_tokenids = generate_text(start_str_token_ids, model, config, 10, device=apple_metal_device, top_k=25, temp=1.5)
+    # print(token_ids_to_text(gen_text_tokenids, tokenizer))
+
+    model.train() # Put in train mode so that the ALL states are saved. This is required if the model needs more training 
+    print("......Saving Checkpoints......")
+    save(model.state_dict(), './checkpoints/model.pth')
+    # The optimizer stores additional state related to the parameters e.g. a history of values.
+    # Therefore, if training is to continue then the optimizer state must also be saved.
+    # save(optimizer.state_dict(), './checkpoints/optimizer.pth')
+
+    print("......Loading Checkpoints......")
+    saved_model = GPTModel(config, device=apple_metal_device)
+    model_checkpoint = load('./checkpoints/model.pth', map_location=apple_metal_device)
+    saved_model.load_state_dict(model_checkpoint)
+
+    saved_model.eval()
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, saved_model, config, 10, device=apple_metal_device)
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
-    
 
+def try_loading_a_checkpoint():
+    from torch import manual_seed, device, save, load
+    from torch.optim import AdamW
+    from llm_components import GPTModel, train_model_simple, generate_text_simple, generate_text, text_ids_to_tokens, token_ids_to_text
+    import tiktoken
+
+    apple_metal_device = device("mps")
+    config = GPT_CONFIG_124M
+    config._context_length = 256
+    # Tweak config for this example.
+    manual_seed(123)
+
+    tokenizer = tiktoken.encoding_for_model("gpt-2")
+
+    start_str = "and then"
+    start_str_token_ids = text_ids_to_tokens(start_str, tokenizer)
+
+    print("......Loading Checkpoints......")
+    saved_model = GPTModel(config, device=apple_metal_device)
+    model_checkpoint = load('./checkpoints/model.pth', map_location=apple_metal_device)
+    saved_model.load_state_dict(model_checkpoint)
+
+    saved_model.eval()
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, saved_model, config, 10, device=apple_metal_device)
+    print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
     
 
 
 if __name__ == '__main__':
-    trying_out_a_train_loop()
+    # try_loading_a_checkpoint()
+    # trying_out_a_train_loop_with_ckpt()
     # try_measure_dataset_loss()
     # try_measure_loss()
     # build_gpt_2()
@@ -576,5 +618,6 @@ if __name__ == '__main__':
     # building_simple_self_attention()
     # testing_simple_embedding()
     # test_data_sampling()
+    # test_custom_tokenizer()
 
      
