@@ -61,27 +61,27 @@ class GPTModel(nn.Module):
         def __init__(self, model_config, device=torch_device("cpu")) -> None:
             super().__init__()
             self.device = device
-            self.tok_embed = nn.Embedding(model_config.get_vocab_size(), model_config.get_embed_dim())
-            self.pos_embed = nn.Embedding(model_config.get_context_length(), model_config.get_embed_dim())
-            self.main_drop = nn.Dropout(model_config.get_dropout_rate())
+            self.tok_emb = nn.Embedding(model_config.get_vocab_size(), model_config.get_embed_dim())
+            self.pos_emb = nn.Embedding(model_config.get_context_length(), model_config.get_embed_dim())
+            self.drop_emb = nn.Dropout(model_config.get_dropout_rate())
 
-            self.txms_blocks = nn.Sequential(*[TransformerBlock(model_config) for _ in range(model_config.get_n_layers())]) # Convert to varargs
+            self.trf_blocks = nn.Sequential(*[TransformerBlock(model_config) for _ in range(model_config.get_n_layers())]) # Convert to varargs
 
-            self.main_norm = LayerNorm(model_config.get_embed_dim())
-            self.logit_head = nn.Linear(model_config.get_embed_dim(), model_config.get_vocab_size(), bias=False) # Bias removed as per GPT2 spec
+            self.final_norm = LayerNorm(model_config.get_embed_dim())
+            self.out_head = nn.Linear(model_config.get_embed_dim(), model_config.get_vocab_size(), bias=False) # Bias removed as per GPT2 spec
             self.to(self.device) # This is nice! Saves a lot of work by moving all the parameters to the device for you.
 
         def forward(self, token_batch):
             _, seq_len = token_batch.shape
-            text_emb_op = self.tok_embed(token_batch)
-            pos_emb_op = self.pos_embed(arange(seq_len, device=token_batch.device))
+            text_emb_op = self.tok_emb(token_batch)
+            pos_emb_op = self.pos_emb(arange(seq_len, device=token_batch.device))
             x = text_emb_op + pos_emb_op
-            x = self.main_drop(x)
+            x = self.drop_emb(x)
 
-            x = self.txms_blocks(x)
+            x = self.trf_blocks(x)
 
-            x = self.main_norm(x)
-            logits = self.logit_head(x)
+            x = self.final_norm(x)
+            logits = self.out_head(x)
             return logits
 
 class CausalMultiHeadedAttention(nn.Module):
@@ -176,30 +176,30 @@ class LayerNorm(nn.Module):
 class TransformerBlock(nn.Module):
         def __init__(self, model_config: GPTConfig) -> None:
             super().__init__()
-            self.attn_head = CausalMultiHeadedAttention(model_config.get_embed_dim(), 
+            self.att = CausalMultiHeadedAttention(model_config.get_embed_dim(), 
                                             model_config.get_embed_dim(),
                                             model_config.get_context_length(),
                                             model_config.get_n_heads(),
                                             model_config.get_dropout_rate(),
                                             model_config.get_qkv_bias())
-            self.l_norm_1 = LayerNorm(model_config.get_embed_dim())
+            self.norm1 = LayerNorm(model_config.get_embed_dim())
 
-            self.l_norm_2 = LayerNorm(model_config.get_embed_dim())
-            self.feed_fwd = FeedForward(model_config.get_embed_dim())
+            self.norm2 = LayerNorm(model_config.get_embed_dim())
+            self.ff = FeedForward(model_config.get_embed_dim())
 
-            self.dropout_layer = nn.Dropout(model_config.get_dropout_rate())
+            self.drop_shortcut = nn.Dropout(model_config.get_dropout_rate())
         
         def forward(self, x):
             residual = x
-            x = self.l_norm_1(x)
-            x = self.attn_head(x)
-            x = self.dropout_layer(x)
+            x = self.norm1(x)
+            x = self.att(x)
+            x = self.drop_shortcut(x)
             x = x + residual
 
             residual = x
-            x = self.l_norm_2(x)
-            x = self.feed_fwd(x)
-            x = self.dropout_layer(x)
+            x = self.norm2(x)
+            x = self.ff(x)
+            x = self.drop_shortcut(x)
             x = x + residual
 
             return x
