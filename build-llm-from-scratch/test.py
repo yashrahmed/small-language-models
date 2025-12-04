@@ -601,43 +601,33 @@ def try_loading_a_checkpoint():
 
 def try_download_gpt2():
     from torch import device, tensor, nn, manual_seed
-    from transformers import GPT2LMHeadModel, GPT2Tokenizer
+    from transformers import GPT2LMHeadModel, GPT2Tokenizer, GPT2Model
     from llm_components import (
-            GPTModel, generate_text_simple, generate_text,
+            GPTModel, generate_text_simple, generate_text, load_weights_from_hfmodel,
             text_ids_to_tokens, token_ids_to_text,
             download_and_load_gpt2, load_gpt2_params_from_tf_ckpt, GPT_CONFIG_124M)
     import tiktoken
 
-    def assign_from_src(target, source, prop_name):
-        tgt_prop = getattr(target, prop_name)
-        assert source.shape == tgt_prop.shape, "Error mismatch of shape between source and target"
-        setattr(target, prop_name, nn.Parameter(tensor(source)))
-
-    # The following three lines only need to run once for the download.
-    # model_size="124M"
-    # models_dir="./checkpoints/gpt2"
-    # settings, params = download_and_load_gpt2(model_size, models_dir)
-
-    # settings = json.load(open(os.path.join(models_dir, model_size, "hparams.json"), "r", encoding="utf-8"))
-    # params = load_gpt2_params_from_tf_ckpt(os.path.join(models_dir, model_size, "model.ckpt"), settings) # model.ckpt does not exist but internally will be linked to ckpt.data-.....
-
     apple_metal_device = device('mps')
     tokenizer = tiktoken.encoding_for_model('gpt-2')
+   
+    manual_seed(123)
 
     config = GPT_CONFIG_124M
     config._qkv_bias= True # GPT 2 use biases on Query, key and value matrices. This was stopped in subsequent models.
-    manual_seed(123)
+    gpt_model = GPTModel(config)
 
+    # Download and initialize GPT model from Huggingface hub.
     gpt_hf = GPT2LMHeadModel.from_pretrained("openai-community/gpt2", cache_dir="./checkpoints")
     gpt_hf.eval()
-    gpt_hf = gpt_hf.to(apple_metal_device)
 
-    start_str = "Every effort moves you towards a goal. But bear in mind"
+    load_weights_from_hfmodel(gpt_model, gpt_hf)
+    gpt_model.eval()
+    gpt_model = gpt_model.to(apple_metal_device)
 
+    start_str = "Every effort moves you"
     start_str_token_ids = text_ids_to_tokens(start_str, tokenizer)
-    # gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_hf, config, 25, device=apple_metal_device)
-    gen_text_tokenids = generate_text(start_str_token_ids, gpt_hf, config, 25, device=apple_metal_device, top_k=25, temp=1.5)
-
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_model, config, 25, model_type="custom", device=apple_metal_device)
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
 
 

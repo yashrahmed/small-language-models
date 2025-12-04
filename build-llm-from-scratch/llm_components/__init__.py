@@ -22,5 +22,6 @@ from .gpt_parts import (
     text_ids_to_tokens,
     token_ids_to_text,
     train_model_simple,
+    load_weights_from_hfmodel,
     GPT_CONFIG_124M
 )

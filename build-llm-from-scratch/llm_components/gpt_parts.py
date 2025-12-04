@@ -9,6 +9,7 @@ from torch import (
 )
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import cross_entropy
+import numpy as np
 import tiktoken
 
 class GPTConfig:
@@ -121,7 +122,7 @@ class CausalMultiHeadedAttention(nn.Module):
             query_op = query_op.transpose(1, 2)
             value_op = value_op.transpose(1, 2)
 
-            attn_mat = key_op @ query_op.transpose(2, 3) # transpose along last 2 dims to align for matmul().
+            attn_mat = query_op @ key_op.transpose(2, 3)  # Standard QK^T attention scores
             mask_mat = self.mask.bool()[:num_tokens, :num_tokens]
             attn_mat.masked_fill_(mask_mat, -inf) # See broadcast rules.
             d_k = self.head_dim
@@ -329,5 +330,46 @@ def train_model_simple(model, optimizer, train_dataloader, val_dataloader, devic
                 step_num += 1
         
         return num_tokens_seen, train_loss_log, val_loss_log
+
+def load_weights_from_hfmodel(gpt, gpt_hf):
+
+    def to_param(left, right):
+        assert left.shape == right.shape, ValueError(f"Shape mismatch. Left: {left.shape}, Right: {right.shape}")
+        return nn.Parameter(right.clone().detach())
+
+    d = gpt_hf.state_dict()
+
+    gpt.pos_emb.weight = to_param(gpt.pos_emb.weight, d["transformer.wpe.weight"])
+    gpt.tok_emb.weight = to_param(gpt.tok_emb.weight, d["transformer.wte.weight"])
+    
+    for b in range(12):
+        q_w, k_w, v_w = np.split(d[f"transformer.h.{b}.attn.c_attn.weight"], 3, axis=-1)
+        gpt.trf_blocks[b].att.W_query.weight = to_param(gpt.trf_blocks[b].att.W_query.weight, q_w.T)
+        gpt.trf_blocks[b].att.W_key.weight = to_param(gpt.trf_blocks[b].att.W_key.weight, k_w.T)
+        gpt.trf_blocks[b].att.W_value.weight = to_param(gpt.trf_blocks[b].att.W_value.weight, v_w.T)
+    
+        q_b, k_b, v_b = np.split(d[f"transformer.h.{b}.attn.c_attn.bias"], 3, axis=-1)
+        gpt.trf_blocks[b].att.W_query.bias = to_param(gpt.trf_blocks[b].att.W_query.bias, q_b)
+        gpt.trf_blocks[b].att.W_key.bias = to_param(gpt.trf_blocks[b].att.W_key.bias, k_b)
+        gpt.trf_blocks[b].att.W_value.bias = to_param(gpt.trf_blocks[b].att.W_value.bias, v_b)
+    
+    
+        gpt.trf_blocks[b].att.out_proj.weight = to_param(gpt.trf_blocks[b].att.out_proj.weight, d[f"transformer.h.{b}.attn.c_proj.weight"].T)
+        gpt.trf_blocks[b].att.out_proj.bias = to_param(gpt.trf_blocks[b].att.out_proj.bias, d[f"transformer.h.{b}.attn.c_proj.bias"])
+    
+        gpt.trf_blocks[b].ff.layers[0].weight = to_param(gpt.trf_blocks[b].ff.layers[0].weight, d[f"transformer.h.{b}.mlp.c_fc.weight"].T)
+        gpt.trf_blocks[b].ff.layers[0].bias = to_param(gpt.trf_blocks[b].ff.layers[0].bias, d[f"transformer.h.{b}.mlp.c_fc.bias"])
+        gpt.trf_blocks[b].ff.layers[2].weight = to_param(gpt.trf_blocks[b].ff.layers[2].weight, d[f"transformer.h.{b}.mlp.c_proj.weight"].T)
+        gpt.trf_blocks[b].ff.layers[2].bias = to_param(gpt.trf_blocks[b].ff.layers[2].bias, d[f"transformer.h.{b}.mlp.c_proj.bias"])
+    
+        gpt.trf_blocks[b].norm1.scale = to_param(gpt.trf_blocks[b].norm1.scale, d[f"transformer.h.{b}.ln_1.weight"])
+        gpt.trf_blocks[b].norm1.shift = to_param(gpt.trf_blocks[b].norm1.shift, d[f"transformer.h.{b}.ln_1.bias"])
+        gpt.trf_blocks[b].norm2.scale = to_param(gpt.trf_blocks[b].norm2.scale, d[f"transformer.h.{b}.ln_2.weight"])
+        gpt.trf_blocks[b].norm2.shift = to_param(gpt.trf_blocks[b].norm2.shift, d[f"transformer.h.{b}.ln_2.bias"])
+    
+        gpt.final_norm.scale = to_param(gpt.final_norm.scale, d["transformer.ln_f.weight"])
+        gpt.final_norm.shift = to_param(gpt.final_norm.shift, d["transformer.ln_f.bias"])
+        gpt.out_head.weight = to_param(gpt.out_head.weight, d["transformer.wte.weight"])
+
 
 GPT_CONFIG_124M = GPTConfig()    
