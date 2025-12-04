@@ -1,10 +1,24 @@
-import re
 import os
+import re
 
-import requests
 import json
 import numpy as np
+import requests
 import tensorflow as tf
+import tiktoken
+from torch import (
+    argmax,
+    cat,
+    multinomial,
+    no_grad,
+    nn,
+    tensor,
+    topk,
+    where,
+    device as torch_device,
+)
+from torch.nn.functional import cross_entropy, softmax
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 # Special token constants
@@ -189,3 +203,249 @@ def load_gpt2_params_from_tf_ckpt(ckpt_path, settings):
         target_dict[last_key] = variable_array
 
     return params
+
+
+class GPTDatasetV1(Dataset):
+    def __init__(self, text, tokenizer, max_length, stride) -> None:
+        self.input_ids = []
+        self.target_ids = []
+        token_ids = tokenizer.encode(text)
+
+        for i in range(0, len(token_ids) - max_length, stride):
+            i_max = i + max_length
+            self.input_ids.append(tensor(token_ids[i:i_max]))
+            self.target_ids.append(tensor(token_ids[i + 1 : i_max + 1]))
+
+    def __len__(self):
+        return len(self.input_ids)
+
+    def __getitem__(self, index):
+        return self.input_ids[index], self.target_ids[index]
+
+
+def calc_avg_loss_per_batch(dataloader, model, device, num_batches):
+    if not num_batches or num_batches < 0:
+        return float("nan")
+    num_batches = min(int(num_batches), len(dataloader))
+    total_loss = 0
+    for i, (inputs_batch, target_batch) in enumerate(dataloader):
+        if i == num_batches:
+            break
+        total_loss += calc_batch_loss(inputs_batch, target_batch, model, device)
+    return total_loss / num_batches
+
+
+def calc_batch_loss(inputs_batch, target_batch, model, device):
+    inputs_batch = inputs_batch.to(device)
+    target_batch = target_batch.to(device)
+    logits = model(inputs_batch)
+    return cross_entropy(logits.flatten(0, 1), target_batch.flatten(0, 1))
+
+
+def create_dataloder_v1(
+    text,
+    max_length=256,
+    stride=128,
+    batch_size=4,
+    drop_last=True,
+    shuffle=True,
+    num_workers=0,
+):
+    tokenizer = tiktoken.encoding_for_model("gpt-2")
+    dataset = GPTDatasetV1(text, tokenizer, max_length, stride)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        drop_last=drop_last,
+        shuffle=shuffle,
+        num_workers=num_workers,
+    )
+
+
+def generate_text(
+    input_tokens_batch,
+    model,
+    config,
+    max_new_tokens,
+    top_k=25,
+    temp=1.0,
+    model_type="hf",
+    device=torch_device("cpu"),
+):
+    input_tokens_batch = input_tokens_batch.to(device)
+
+    for _ in range(max_new_tokens):
+        cropped_tokens = input_tokens_batch[:, -config.get_context_length() :]
+        with no_grad():
+            logits = model(cropped_tokens)
+            logits = logits.logits if model_type == "hf" else logits
+        logits = logits[:, -1, :]
+
+        if top_k and top_k > 0:
+            top_k_logits, _ = topk(logits, top_k, dim=-1)
+            min_topk_val = top_k_logits[:, -1]
+            logits = where(logits < min_topk_val, tensor(float("-inf")).to(device), logits)
+
+        if temp and temp > 0.0:
+            logits /= temp
+            probs = softmax(logits, dim=-1)
+            nxt_token_ids = multinomial(probs, num_samples=1)
+        else:
+            probs = softmax(logits, dim=-1)
+            nxt_token_ids = argmax(probs, dim=-1, keepdim=True)
+        input_tokens_batch = cat((input_tokens_batch, nxt_token_ids), dim=-1)
+
+    return input_tokens_batch
+
+
+def generate_text_simple(
+    input_tokens_batch,
+    model,
+    config,
+    max_new_tokens,
+    model_type="hf",
+    device=torch_device("cpu"),
+):
+    input_tokens_batch = input_tokens_batch.to(device)
+
+    for _ in range(max_new_tokens):
+        cropped_tokens = input_tokens_batch[:, -config.get_context_length() :]
+        with no_grad():
+            logits = model(cropped_tokens)
+            logits = logits.logits if model_type == "hf" else logits
+
+        logits = logits[:, -1, :]
+        probs = softmax(logits, dim=-1)
+        nxt_token_ids = argmax(probs, dim=-1, keepdim=True)
+        input_tokens_batch = cat((input_tokens_batch, nxt_token_ids), dim=-1)
+
+    return input_tokens_batch
+
+
+def text_ids_to_tokens(text, tokenizer):
+    return tensor(tokenizer.encode(text, allowed_special={"<|endoftext|>"})).unsqueeze(0)
+
+
+def token_ids_to_text(token_ids, tokenizer):
+    ids = token_ids.squeeze(0).tolist()
+    return tokenizer.decode(ids)
+
+
+def train_model_simple(
+    model,
+    optimizer,
+    train_dataloader,
+    val_dataloader,
+    device,
+    num_epochs,
+    eval_batch_interval=5,
+    eval_batch_size=5,
+    verbose=False,
+):
+    num_tokens_seen_log, train_loss_log, val_loss_log = [], [], []
+    num_tokens_seen = 0
+
+    step_num = 0
+    for i in range(num_epochs):
+        if verbose:
+            print("_______")
+        model.train()
+        for (input_batch, target_batch) in train_dataloader:
+            optimizer.zero_grad()
+            loss = calc_batch_loss(input_batch, target_batch, model, device)
+            loss.backward()
+            optimizer.step()
+            num_tokens_seen += input_batch.numel()
+            if step_num % eval_batch_interval == 0:
+                model.eval()
+                with no_grad():
+                    train_loss = calc_avg_loss_per_batch(
+                        train_dataloader, model, device, eval_batch_size
+                    )
+                    val_loss = calc_avg_loss_per_batch(
+                        val_dataloader, model, device, eval_batch_size
+                    )
+                    num_tokens_seen_log.append(num_tokens_seen)
+                    train_loss_log.append(train_loss)
+                    val_loss_log.append(val_loss)
+                    if verbose:
+                        print(
+                            f"Tokens seen = {num_tokens_seen} | Train loss = {train_loss} | "
+                            f"Validation loss = {val_loss} | Epoch={i} | stepNum = {step_num}"
+                        )
+                model.train()
+            step_num += 1
+
+    return num_tokens_seen, train_loss_log, val_loss_log
+
+
+def load_weights_from_hfmodel(gpt, gpt_hf):
+    def to_param(left, right):
+        assert left.shape == right.shape, ValueError(
+            f"Shape mismatch. Left: {left.shape}, Right: {right.shape}"
+        )
+        return nn.Parameter(right.clone().detach())
+
+    d = gpt_hf.state_dict()
+
+    gpt.pos_emb.weight = to_param(gpt.pos_emb.weight, d["transformer.wpe.weight"])
+    gpt.tok_emb.weight = to_param(gpt.tok_emb.weight, d["transformer.wte.weight"])
+
+    for b in range(12):
+        q_w, k_w, v_w = np.split(d[f"transformer.h.{b}.attn.c_attn.weight"], 3, axis=-1)
+        gpt.trf_blocks[b].att.W_query.weight = to_param(
+            gpt.trf_blocks[b].att.W_query.weight, q_w.T
+        )
+        gpt.trf_blocks[b].att.W_key.weight = to_param(
+            gpt.trf_blocks[b].att.W_key.weight, k_w.T
+        )
+        gpt.trf_blocks[b].att.W_value.weight = to_param(
+            gpt.trf_blocks[b].att.W_value.weight, v_w.T
+        )
+
+        q_b, k_b, v_b = np.split(d[f"transformer.h.{b}.attn.c_attn.bias"], 3, axis=-1)
+        gpt.trf_blocks[b].att.W_query.bias = to_param(
+            gpt.trf_blocks[b].att.W_query.bias, q_b
+        )
+        gpt.trf_blocks[b].att.W_key.bias = to_param(gpt.trf_blocks[b].att.W_key.bias, k_b)
+        gpt.trf_blocks[b].att.W_value.bias = to_param(
+            gpt.trf_blocks[b].att.W_value.bias, v_b
+        )
+
+        gpt.trf_blocks[b].att.out_proj.weight = to_param(
+            gpt.trf_blocks[b].att.out_proj.weight,
+            d[f"transformer.h.{b}.attn.c_proj.weight"].T,
+        )
+        gpt.trf_blocks[b].att.out_proj.bias = to_param(
+            gpt.trf_blocks[b].att.out_proj.bias, d[f"transformer.h.{b}.attn.c_proj.bias"]
+        )
+
+        gpt.trf_blocks[b].ff.layers[0].weight = to_param(
+            gpt.trf_blocks[b].ff.layers[0].weight, d[f"transformer.h.{b}.mlp.c_fc.weight"].T
+        )
+        gpt.trf_blocks[b].ff.layers[0].bias = to_param(
+            gpt.trf_blocks[b].ff.layers[0].bias, d[f"transformer.h.{b}.mlp.c_fc.bias"]
+        )
+        gpt.trf_blocks[b].ff.layers[2].weight = to_param(
+            gpt.trf_blocks[b].ff.layers[2].weight, d[f"transformer.h.{b}.mlp.c_proj.weight"].T
+        )
+        gpt.trf_blocks[b].ff.layers[2].bias = to_param(
+            gpt.trf_blocks[b].ff.layers[2].bias, d[f"transformer.h.{b}.mlp.c_proj.bias"]
+        )
+
+        gpt.trf_blocks[b].norm1.scale = to_param(
+            gpt.trf_blocks[b].norm1.scale, d[f"transformer.h.{b}.ln_1.weight"]
+        )
+        gpt.trf_blocks[b].norm1.shift = to_param(
+            gpt.trf_blocks[b].norm1.shift, d[f"transformer.h.{b}.ln_1.bias"]
+        )
+        gpt.trf_blocks[b].norm2.scale = to_param(
+            gpt.trf_blocks[b].norm2.scale, d[f"transformer.h.{b}.ln_2.weight"]
+        )
+        gpt.trf_blocks[b].norm2.shift = to_param(
+            gpt.trf_blocks[b].norm2.shift, d[f"transformer.h.{b}.ln_2.bias"]
+        )
+
+        gpt.final_norm.scale = to_param(gpt.final_norm.scale, d["transformer.ln_f.weight"])
+        gpt.final_norm.shift = to_param(gpt.final_norm.shift, d["transformer.ln_f.bias"])
+        gpt.out_head.weight = to_param(gpt.out_head.weight, d["transformer.wte.weight"])
