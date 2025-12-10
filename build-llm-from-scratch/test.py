@@ -602,7 +602,7 @@ def try_download_gpt2():
     from llm_components import (
             GPTModel, generate_text_simple, generate_text, load_weights_from_hfmodel,
             text_ids_to_tokens, token_ids_to_text,
-            download_and_load_gpt2, load_gpt2_params_from_tf_ckpt, GPT_CONFIG_124M)
+            GPT_CONFIG_124M)
     import tiktoken
 
     apple_metal_device = device('mps')
@@ -627,9 +627,43 @@ def try_download_gpt2():
     gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_model, config, 25, model_type="custom", device=apple_metal_device)
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
 
+def try_loading_classification_dataset():
+    import pandas as pd
+    dataset = pd.read_csv('./datasets/sms+spam+collection/SMSSpamCollection', sep='\t', names=["label", "text"])
+    print(dataset.head())
+
+    def gen_balanaced_ds(ds_ref):
+        spam_ds = ds_ref[ds_ref["label"]=="spam"]
+        num_spam = spam_ds.shape[0]
+        ham_ds_smp = ds_ref[ds_ref["label"]=="ham"].sample(num_spam, random_state=123)
+        result = pd.concat([ham_ds_smp, spam_ds])
+        result["label"] = result["label"].map({"ham": 0, "spam": 1})
+        return result
+    
+    def train_test_val_split(ds_ref, train_frac, validation_frac):
+        ds_ref = ds_ref.sample(frac=1, random_state=123).reset_index(drop=True) # Shuffle the entire data frame
+        dz_sz = len(ds_ref)
+        train_idx_end = int(train_frac * dz_sz)
+        val_idx_end = train_idx_end + int(validation_frac * dz_sz)
+        return ds_ref[:train_idx_end], ds_ref[train_idx_end:val_idx_end], ds_ref[val_idx_end:]
+
+    
+    balanced_dataset = gen_balanaced_ds(dataset)
+    print(balanced_dataset["label"].value_counts())
+
+    train, val, test = train_test_val_split(balanced_dataset, 0.7, 0.1)
+    print(len(train))
+    print(len(val))
+    print(len(test))
+
+    train.to_csv('./datasets/train.csv', index=None)
+    val.to_csv('./datasets/validation.csv', index=None)
+    test.to_csv('./datasets/test.csv', index=None)
+
 
 if __name__ == '__main__':
-    try_download_gpt2()
+    try_loading_classification_dataset()
+    # try_download_gpt2()
     # try_loading_a_checkpoint()
     # trying_out_a_train_loop_with_ckpt()
     # try_measure_dataset_loss()

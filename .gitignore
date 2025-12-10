@@ -172,3 +172,6 @@ cython_debug/
 
 # Checkpoints
 checkpoints
+
+# Datasets
+datasets
