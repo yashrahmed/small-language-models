@@ -597,8 +597,8 @@ def try_loading_a_checkpoint():
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
 
 def try_download_gpt2():
-    from torch import device, tensor, nn, manual_seed
-    from transformers import GPT2LMHeadModel, GPT2Tokenizer, GPT2Model
+    from torch import device, manual_seed
+    from transformers import GPT2LMHeadModel
     from llm_components import (
             GPTModel, generate_text_simple, generate_text, load_weights_from_hfmodel,
             text_to_token_ids, token_ids_to_text,
@@ -660,13 +660,12 @@ def try_loading_classification_dataset():
     val.to_csv('./datasets/val.csv', index=None)
     test.to_csv('./datasets/test.csv', index=None)
 
-
 def try_setup_for_hamspam():
     import pandas as pd
     from torch.utils.data import Dataset, DataLoader
     import tiktoken
     from torch import tensor, long, device, nn, no_grad, manual_seed
-    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple
+    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch_binary, calc_avg_acc_binary
 
     # Define a dataset subclass with truncation/padding functionality
     class SpamDataset(Dataset):
@@ -709,23 +708,23 @@ def try_setup_for_hamspam():
     val_dataset = SpamDataset("./datasets/val.csv", tokenizer)
     test_dataset = SpamDataset("./datasets/test.csv", tokenizer)
 
-    print(train_dataset.max_len)
-    print(val_dataset.max_len)
-    print(test_dataset.max_len)
+    # print(train_dataset.max_len)
+    # print(val_dataset.max_len)
+    # print(test_dataset.max_len)
 
     # Create dataloader objects for train, val and test.
     train_dataloader = DataLoader(train_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
     val_dataloader = DataLoader(val_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
     test_dataloader = DataLoader(test_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
 
-    for input_batch, tgt_batch in train_dataloader:
-        pass
-    print(input_batch.shape)
-    print(tgt_batch.shape)
+    # for input_batch, tgt_batch in train_dataloader:
+    #     pass
+    # print(input_batch.shape)
+    # print(tgt_batch.shape)
 
-    print(len(train_dataloader))
-    print(len(val_dataloader))
-    print(len(test_dataloader))
+    # print(len(train_dataloader))
+    # print(len(val_dataloader))
+    # print(len(test_dataloader))
 
     # Load weights from a Huggingface pretrained model and verify via text generation.
     gpt_model_config, gpt_model = load_gpt2_pretrained(apple_metal_device, 123)
@@ -739,7 +738,7 @@ def try_setup_for_hamspam():
     #     device=apple_metal_device)
     # print(token_ids_to_text(result, tokenizer))
     # print('#######')
-    print(gpt_model)
+    # print(gpt_model)
 
     # Freeze the model parameters
     for param in gpt_model.parameters():
@@ -755,13 +754,16 @@ def try_setup_for_hamspam():
     for params in gpt_model.trf_blocks[-1].parameters():
         params.requires_grad = True
     
+    # Test the avg loss calculation for the binary problem
+    manual_seed(123)
     with no_grad():
-        gpt_model.eval()
-        inputs = text_to_token_ids("Do you have time", tokenizer).to(apple_metal_device)
-        print(inputs)
-        output = gpt_model(inputs)
-        print(output)
-        print(output.shape)
+        train_acc = calc_avg_acc_binary(train_dataloader, gpt_model, apple_metal_device, 10)
+        val_acc = calc_avg_acc_binary(val_dataloader, gpt_model, apple_metal_device, 10)
+        test_acc = calc_avg_acc_binary(test_dataloader, gpt_model, apple_metal_device, 10)
+
+    print(f"Train acc = {train_acc*100:.2f}%")
+    print(f"Val acc = {val_acc*100:.2f}%")
+    print(f"Test acc = {test_acc*100:.2f}%")
 
 
 

@@ -76,6 +76,23 @@ class GPTDatasetV1(Dataset):
         return self.input_ids[index], self.target_ids[index]
 
 
+def calc_avg_acc_binary(dataloader, model, device, num_batches):
+    if not num_batches or num_batches < 0:
+        return float("nan")
+    num_batches = min(int(num_batches), len(dataloader))
+    total_examples = 0
+    correct = 0
+    for i, (inputs_batch, target_batch) in enumerate(dataloader):
+        inputs_batch = inputs_batch.to(device)
+        target_batch = target_batch.to(device)
+        if i >= num_batches:
+            break
+        logits = model(inputs_batch)[:, -1, :]
+        pred = argmax(logits, dim=-1)
+        total_examples += pred.shape[0]
+        correct += (pred == target_batch).sum().item()
+    return correct / total_examples
+
 def calc_avg_loss_per_batch(dataloader, model, device, num_batches):
     if not num_batches or num_batches < 0:
         return float("nan")
@@ -87,6 +104,16 @@ def calc_avg_loss_per_batch(dataloader, model, device, num_batches):
         total_loss += calc_batch_loss(inputs_batch, target_batch, model, device)
     return total_loss / num_batches
 
+def calc_avg_loss_per_batch_binary(dataloader, model, device, num_batches):
+    if not num_batches or num_batches < 0:
+        return float("nan")
+    num_batches = min(int(num_batches), len(dataloader))
+    total_loss = 0
+    for i, (inputs_batch, target_batch) in enumerate(dataloader):
+        if i == num_batches:
+            break
+        total_loss += calc_batch_loss_binary(inputs_batch, target_batch, model, device)
+    return total_loss / num_batches
 
 def calc_batch_loss(inputs_batch, target_batch, model, device):
     inputs_batch = inputs_batch.to(device)
@@ -94,6 +121,16 @@ def calc_batch_loss(inputs_batch, target_batch, model, device):
     logits = model(inputs_batch)
     return cross_entropy(logits.flatten(0, 1), target_batch.flatten(0, 1))
 
+def calc_batch_loss_binary(inputs_batch, target_batch, model, device):
+    """
+    Unlike regular calc_batch_loss
+    where each instance of an input contained N input vectors and N output vectors (hence the need to flatten),
+    the binary problem contains N input vectors and 1 output vectors. We will pick the last set of logits as a target (hence :,-1,:)
+    """
+    inputs_batch = inputs_batch.to(device)
+    target_batch = target_batch.to(device)
+    logits = model(inputs_batch)[:, -1, :] # Pick only the last context for classification. 
+    return cross_entropy(logits, target_batch)
 
 def create_dataloder_v1(
     text,
@@ -113,7 +150,6 @@ def create_dataloder_v1(
         shuffle=shuffle,
         num_workers=num_workers,
     )
-
 
 def generate_text(
     input_tokens_batch,
@@ -150,7 +186,6 @@ def generate_text(
 
     return input_tokens_batch
 
-
 def generate_text_simple(
     input_tokens_batch,
     model,
@@ -173,64 +208,6 @@ def generate_text_simple(
         input_tokens_batch = cat((input_tokens_batch, nxt_token_ids), dim=-1)
 
     return input_tokens_batch
-
-
-def text_to_token_ids(text, tokenizer):
-    return tensor(tokenizer.encode(text, allowed_special={"<|endoftext|>"})).unsqueeze(0)
-
-
-def token_ids_to_text(token_ids, tokenizer):
-    ids = token_ids.squeeze(0).tolist()
-    return tokenizer.decode(ids)
-
-
-def train_model_simple(
-    model,
-    optimizer,
-    train_dataloader,
-    val_dataloader,
-    device,
-    num_epochs,
-    eval_batch_interval=5,
-    eval_batch_size=5,
-    verbose=False,
-):
-    num_tokens_seen_log, train_loss_log, val_loss_log = [], [], []
-    num_tokens_seen = 0
-
-    step_num = 0
-    for i in range(num_epochs):
-        if verbose:
-            print("_______")
-        model.train()
-        for (input_batch, target_batch) in train_dataloader:
-            optimizer.zero_grad()
-            loss = calc_batch_loss(input_batch, target_batch, model, device)
-            loss.backward()
-            optimizer.step()
-            num_tokens_seen += input_batch.numel()
-            if step_num % eval_batch_interval == 0:
-                model.eval()
-                with no_grad():
-                    train_loss = calc_avg_loss_per_batch(
-                        train_dataloader, model, device, eval_batch_size
-                    )
-                    val_loss = calc_avg_loss_per_batch(
-                        val_dataloader, model, device, eval_batch_size
-                    )
-                    num_tokens_seen_log.append(num_tokens_seen)
-                    train_loss_log.append(train_loss)
-                    val_loss_log.append(val_loss)
-                    if verbose:
-                        print(
-                            f"Tokens seen = {num_tokens_seen} | Train loss = {train_loss} | "
-                            f"Validation loss = {val_loss} | Epoch={i} | stepNum = {step_num}"
-                        )
-                model.train()
-            step_num += 1
-
-    return num_tokens_seen, train_loss_log, val_loss_log
-
 
 def load_weights_from_hfmodel(gpt, gpt_hf):
     def to_param(left, right):
@@ -303,7 +280,6 @@ def load_weights_from_hfmodel(gpt, gpt_hf):
         gpt.final_norm.shift = to_param(gpt.final_norm.shift, d["transformer.ln_f.bias"])
         gpt.out_head.weight = to_param(gpt.out_head.weight, d["transformer.wte.weight"])
 
-
 def load_gpt2_pretrained(device, seed_val):
     config = GPT_CONFIG_124M
     config._qkv_bias= True # GPT 2 use biases on Query, key and value matrices. This was stopped in subsequent models.
@@ -317,3 +293,57 @@ def load_gpt2_pretrained(device, seed_val):
     load_weights_from_hfmodel(gpt_model, gpt_hf)
     gpt_model.eval()
     return config, gpt_model.to(device)
+
+def text_to_token_ids(text, tokenizer):
+    return tensor(tokenizer.encode(text, allowed_special={"<|endoftext|>"})).unsqueeze(0)
+
+def token_ids_to_text(token_ids, tokenizer):
+    ids = token_ids.squeeze(0).tolist()
+    return tokenizer.decode(ids)
+
+def train_model_simple(
+    model,
+    optimizer,
+    train_dataloader,
+    val_dataloader,
+    device,
+    num_epochs,
+    eval_batch_interval=5,
+    eval_batch_size=5,
+    verbose=False,
+):
+    num_tokens_seen_log, train_loss_log, val_loss_log = [], [], []
+    num_tokens_seen = 0
+
+    step_num = 0
+    for i in range(num_epochs):
+        if verbose:
+            print("_______")
+        model.train()
+        for (input_batch, target_batch) in train_dataloader:
+            optimizer.zero_grad()
+            loss = calc_batch_loss(input_batch, target_batch, model, device)
+            loss.backward()
+            optimizer.step()
+            num_tokens_seen += input_batch.numel()
+            if step_num % eval_batch_interval == 0:
+                model.eval()
+                with no_grad():
+                    train_loss = calc_avg_loss_per_batch(
+                        train_dataloader, model, device, eval_batch_size
+                    )
+                    val_loss = calc_avg_loss_per_batch(
+                        val_dataloader, model, device, eval_batch_size
+                    )
+                    num_tokens_seen_log.append(num_tokens_seen)
+                    train_loss_log.append(train_loss)
+                    val_loss_log.append(val_loss)
+                    if verbose:
+                        print(
+                            f"Tokens seen = {num_tokens_seen} | Train loss = {train_loss} | "
+                            f"Validation loss = {val_loss} | Epoch={i} | stepNum = {step_num}"
+                        )
+                model.train()
+            step_num += 1
+
+    return num_tokens_seen, train_loss_log, val_loss_log
