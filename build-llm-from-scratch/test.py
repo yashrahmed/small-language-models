@@ -665,7 +665,7 @@ def try_setup_for_hamspam():
     import pandas as pd
     from torch.utils.data import Dataset, DataLoader
     import tiktoken
-    from torch import tensor, long, device
+    from torch import tensor, long, device, nn, no_grad, manual_seed
     from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple
 
     # Define a dataset subclass with truncation/padding functionality
@@ -728,16 +728,43 @@ def try_setup_for_hamspam():
     print(len(test_dataloader))
 
     # Load weights from a Huggingface pretrained model and verify via text generation.
-    gpt_model = load_gpt2_pretrained(apple_metal_device, 123)
-    text = "Every effort makes you"
-    result = generate_text_simple(
-        text_to_token_ids(text, tokenizer),
-        gpt_model,
-        1024,
-        15, 
-        model_type="custom",
-        device=apple_metal_device)
-    print(token_ids_to_text(result, tokenizer))
+    gpt_model_config, gpt_model = load_gpt2_pretrained(apple_metal_device, 123)
+    # text = "Every effort makes you"
+    # result = generate_text_simple(
+    #     text_to_token_ids(text, tokenizer),
+    #     gpt_model,
+    #     1024,
+    #     15, 
+    #     model_type="custom",
+    #     device=apple_metal_device)
+    # print(token_ids_to_text(result, tokenizer))
+    # print('#######')
+    print(gpt_model)
+
+    # Freeze the model parameters
+    for param in gpt_model.parameters():
+        param.requires_grad = False # Disable gradient tracking.
+    
+    # Replace the 50257 way classification head with a 2 way classification head.
+    new_out_head = nn.Linear(gpt_model_config.get_embed_dim(), 2, device=apple_metal_device) # requires_grad is set to True by default
+    gpt_model.out_head = new_out_head
+
+    # Unfreeze the final norm and the last txfm block (This improves predictive performance as per the book)
+    for params in gpt_model.final_norm.parameters():
+        params.requires_grad = True
+    for params in gpt_model.trf_blocks[-1].parameters():
+        params.requires_grad = True
+    
+    with no_grad():
+        gpt_model.eval()
+        inputs = text_to_token_ids("Do you have time", tokenizer).to(apple_metal_device)
+        print(inputs)
+        output = gpt_model(inputs)
+        print(output)
+        print(output.shape)
+
+
+
 
         
 

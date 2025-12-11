@@ -316,4 +316,4 @@ def load_gpt2_pretrained(device, seed_val):
 
     load_weights_from_hfmodel(gpt_model, gpt_hf)
     gpt_model.eval()
-    return gpt_model.to(device)
+    return config, gpt_model.to(device)
