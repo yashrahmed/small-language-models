@@ -353,7 +353,7 @@ def build_gpt_2():
     import torch
     from torch import nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand, arange, argmax, cat
     import tiktoken
-    from llm_components import GPTModel, generate_text_simple, text_ids_to_tokens, token_ids_to_text
+    from llm_components import GPTModel, generate_text_simple, text_to_token_ids, token_ids_to_text
 
     manual_seed(123)
      
@@ -369,7 +369,7 @@ def build_gpt_2():
     #     # tokenizer.encode(sentence2),
     #     tokenizer.encode(sentence3)
     # ])
-    batch = text_ids_to_tokens(sentence3, tokenizer)
+    batch = text_to_token_ids(sentence3, tokenizer)
 
     model = GPTModel(GPT_CONFIG_124M)
     total_params = sum([p.numel() for p in model.parameters()])
@@ -394,7 +394,7 @@ def build_gpt_2():
 
     # print(batch)
     model.eval() # Puts the model in eval mode; Different from no_grad; Some layers e.g. dropout work differently
-    output_tokens = generate_text_simple(batch, model, GPT_CONFIG_124M, 6)
+    output_tokens = generate_text_simple(batch, model, GPT_CONFIG_124M.get_context_length(), 6)
     print(token_ids_to_text(output_tokens, tokenizer))
     # print(tokenizer.decode(output_tokens[0, :].tolist()))
 
@@ -403,7 +403,7 @@ def try_measure_loss():
     from torch import (nn, softmax, tensor, manual_seed, triu, ones, zeros, inf, randn, mean, var, sqrt, tanh, pi, pow, linspace, rand, arange, argmax, cat,
                        log)
     import tiktoken
-    from llm_components import GPTModel, generate_text_simple, text_ids_to_tokens, token_ids_to_text
+    from llm_components import GPTModel, generate_text_simple, text_to_token_ids, token_ids_to_text
     
     
     config = GPT_CONFIG_124M
@@ -512,7 +512,7 @@ def try_measure_dataset_loss():
 def trying_out_a_train_loop_with_ckpt():
     from torch import manual_seed, device, save, load
     from torch.optim import AdamW
-    from llm_components import GPTModel, train_model_simple, generate_text_simple, generate_text, text_ids_to_tokens, token_ids_to_text
+    from llm_components import GPTModel, train_model_simple, generate_text_simple, generate_text, text_to_token_ids, token_ids_to_text
     import tiktoken
 
     apple_metal_device = device("mps")
@@ -538,20 +538,20 @@ def trying_out_a_train_loop_with_ckpt():
     
 
     start_str = "Every effort moves you"
-    start_str_token_ids = text_ids_to_tokens(start_str, tokenizer)
+    start_str_token_ids = text_to_token_ids(start_str, tokenizer)
     
     # Optimizer and modelsetup
     model = GPTModel(config, device=apple_metal_device)
     optimizer = AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
     num_epochs = 50
 
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, device=apple_metal_device, model_type="custom")
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config.get_context_length(), 10, device=apple_metal_device, model_type="custom")
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
     train_model_simple(model, optimizer, train_dataloader, test_dataloader, apple_metal_device, num_epochs)
 
     model.eval()
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, device=apple_metal_device, model_type="custom")
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config.get_context_length(), 10, device=apple_metal_device, model_type="custom")
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
     model.train() # Put in train mode so that the ALL states are saved. This is required if the model needs more training 
@@ -567,13 +567,13 @@ def trying_out_a_train_loop_with_ckpt():
     saved_model.load_state_dict(model_checkpoint)
 
     saved_model.eval()
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config, 10, device=apple_metal_device, model_type="custom")
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, model, config.get_context_length(), 10, device=apple_metal_device, model_type="custom")
     print(token_ids_to_text(gen_text_tokenids, tokenizer))
 
 def try_loading_a_checkpoint():
     from torch import manual_seed, device, save, load
     from torch.optim import AdamW
-    from llm_components import GPTModel, train_model_simple, generate_text_simple, generate_text, text_ids_to_tokens, token_ids_to_text
+    from llm_components import GPTModel, train_model_simple, generate_text_simple, generate_text, text_to_token_ids, token_ids_to_text
     import tiktoken
 
     apple_metal_device = device("mps")
@@ -585,7 +585,7 @@ def try_loading_a_checkpoint():
     tokenizer = tiktoken.encoding_for_model("gpt-2")
 
     start_str = "and then"
-    start_str_token_ids = text_ids_to_tokens(start_str, tokenizer)
+    start_str_token_ids = text_to_token_ids(start_str, tokenizer)
 
     print("......Loading Checkpoints......")
     saved_model = GPTModel(config, device=apple_metal_device)
@@ -593,7 +593,7 @@ def try_loading_a_checkpoint():
     saved_model.load_state_dict(model_checkpoint)
 
     saved_model.eval()
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, saved_model, config, 10, device=apple_metal_device)
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, saved_model, config.get_context_length(), 10, device=apple_metal_device)
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
 
 def try_download_gpt2():
@@ -601,7 +601,7 @@ def try_download_gpt2():
     from transformers import GPT2LMHeadModel, GPT2Tokenizer, GPT2Model
     from llm_components import (
             GPTModel, generate_text_simple, generate_text, load_weights_from_hfmodel,
-            text_ids_to_tokens, token_ids_to_text,
+            text_to_token_ids, token_ids_to_text,
             GPT_CONFIG_124M)
     import tiktoken
 
@@ -623,8 +623,8 @@ def try_download_gpt2():
     gpt_model = gpt_model.to(apple_metal_device)
 
     start_str = "Every effort moves you"
-    start_str_token_ids = text_ids_to_tokens(start_str, tokenizer)
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_model, config, 25, model_type="custom", device=apple_metal_device)
+    start_str_token_ids = text_to_token_ids(start_str, tokenizer)
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_model, config.get_context_length(), 25, model_type="custom", device=apple_metal_device)
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
 
 def try_loading_classification_dataset():
@@ -657,12 +657,93 @@ def try_loading_classification_dataset():
     print(len(test))
 
     train.to_csv('./datasets/train.csv', index=None)
-    val.to_csv('./datasets/validation.csv', index=None)
+    val.to_csv('./datasets/val.csv', index=None)
     test.to_csv('./datasets/test.csv', index=None)
 
 
+def try_setup_for_hamspam():
+    import pandas as pd
+    from torch.utils.data import Dataset, DataLoader
+    import tiktoken
+    from torch import tensor, long, device
+    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple
+
+    # Define a dataset subclass with truncation/padding functionality
+    class SpamDataset(Dataset):
+        def __init__(self, csv_path, tokenizer, pad_token_id=50256, max_length=None) -> None:
+            super().__init__()
+            self.data = pd.read_csv(csv_path)
+            self.encoded_texts = [tokenizer.encode(text) for text in self.data["text"]]
+            # calculate max length and pad
+            
+            if max_length is not None:
+                self.max_len = max_length
+                # Truncate
+                self.encoded_texts = [ text[:self.max_len] for text in self.encoded_texts]
+            else:
+                self.max_len = self._max_encoded_length()
+                # Pad
+                self.encoded_texts = [ text + [pad_token_id] * (self.max_len - len(text)) for text in self.encoded_texts]
+        
+        def __getitem__(self, idx):
+            return (
+                tensor(self.encoded_texts[idx], dtype=long),
+                tensor(self.data.iloc[idx]["label"], dtype=long)
+            )
+
+        def __len__(self):
+            return len(self.data)
+
+        def _max_encoded_length(self):
+            max_len = 0
+            for text in self.encoded_texts:
+                max_len = max(max_len, len(text))
+            return max_len
+    
+    apple_metal_device = device("mps")
+    tokenizer = tiktoken.encoding_for_model("gpt2")
+    batch_size = 8
+
+    # Instantiate train, val and test Dataset objects.
+    train_dataset = SpamDataset("./datasets/train.csv", tokenizer)
+    val_dataset = SpamDataset("./datasets/val.csv", tokenizer)
+    test_dataset = SpamDataset("./datasets/test.csv", tokenizer)
+
+    print(train_dataset.max_len)
+    print(val_dataset.max_len)
+    print(test_dataset.max_len)
+
+    # Create dataloader objects for train, val and test.
+    train_dataloader = DataLoader(train_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
+    val_dataloader = DataLoader(val_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
+    test_dataloader = DataLoader(test_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
+
+    for input_batch, tgt_batch in train_dataloader:
+        pass
+    print(input_batch.shape)
+    print(tgt_batch.shape)
+
+    print(len(train_dataloader))
+    print(len(val_dataloader))
+    print(len(test_dataloader))
+
+    # Load weights from a Huggingface pretrained model and verify via text generation.
+    gpt_model = load_gpt2_pretrained(apple_metal_device, 123)
+    text = "Every effort makes you"
+    result = generate_text_simple(
+        text_to_token_ids(text, tokenizer),
+        gpt_model,
+        1024,
+        15, 
+        model_type="custom",
+        device=apple_metal_device)
+    print(token_ids_to_text(result, tokenizer))
+
+        
+
 if __name__ == '__main__':
-    try_loading_classification_dataset()
+    try_setup_for_hamspam()
+    # try_loading_classification_dataset()
     # try_download_gpt2()
     # try_loading_a_checkpoint()
     # trying_out_a_train_loop_with_ckpt()

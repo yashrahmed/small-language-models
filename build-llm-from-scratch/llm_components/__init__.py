@@ -1,8 +1,6 @@
 from .utils import (
     SimpleTokenizer,
     VocabBuilder,
-    download_and_load_gpt2,
-    load_gpt2_params_from_tf_ckpt,
     END_OF_TEXT_TOKEN,
     UNK_TOKEN,
     GPTDatasetV1,
@@ -11,10 +9,11 @@ from .utils import (
     create_dataloder_v1,
     generate_text,
     generate_text_simple,
-    text_ids_to_tokens,
+    text_to_token_ids,
     token_ids_to_text,
     train_model_simple,
     load_weights_from_hfmodel,
+    load_gpt2_pretrained
 )
 from .gpt_parts import (
     CausalMultiHeadedAttention,
