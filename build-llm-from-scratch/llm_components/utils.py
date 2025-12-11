@@ -76,7 +76,7 @@ class GPTDatasetV1(Dataset):
         return self.input_ids[index], self.target_ids[index]
 
 
-def calc_avg_acc_binary(dataloader, model, device, num_batches):
+def calc_acc_binary(dataloader, model, device, num_batches):
     if not num_batches or num_batches < 0:
         return float("nan")
     num_batches = min(int(num_batches), len(dataloader))
@@ -345,5 +345,57 @@ def train_model_simple(
                         )
                 model.train()
             step_num += 1
+
+    return num_tokens_seen, train_loss_log, val_loss_log
+
+def train_model_simple_binary(
+    model,
+    optimizer,
+    train_dataloader,
+    val_dataloader,
+    device,
+    num_epochs,
+    eval_batch_interval=5,
+    eval_batch_size=5,
+    verbose=False,
+):
+    num_tokens_seen_log, train_loss_log, val_loss_log = [], [], []
+    num_tokens_seen = 0
+
+    step_num = 0
+    for i in range(num_epochs):
+        if verbose:
+            print("_______")
+        model.train()
+        for (input_batch, target_batch) in train_dataloader:
+            optimizer.zero_grad()
+            loss = calc_batch_loss_binary(input_batch, target_batch, model, device)
+            loss.backward()
+            optimizer.step()
+            num_tokens_seen += input_batch.numel()
+            if step_num % eval_batch_interval == 0:
+                model.eval()
+                with no_grad():
+                    train_loss = calc_avg_loss_per_batch_binary(
+                        train_dataloader, model, device, eval_batch_size
+                    )
+                    val_loss = calc_avg_loss_per_batch_binary(
+                        val_dataloader, model, device, eval_batch_size
+                    )
+                    num_tokens_seen_log.append(num_tokens_seen)
+                    train_loss_log.append(train_loss)
+                    val_loss_log.append(val_loss)
+                    if verbose:
+                        print(
+                            f"Tokens seen = {num_tokens_seen} | Train loss = {train_loss} | "
+                            f"Validation loss = {val_loss} | Epoch={i} | stepNum = {step_num}"
+                        )
+                model.train()
+            step_num += 1
+        if verbose:
+            train_acc = calc_acc_binary(train_dataloader, model, device, eval_batch_size)
+            val_acc =  calc_acc_binary(val_dataloader, model, device, eval_batch_size)
+            print(f"Train acc at epoch {i} = {train_acc*100:.2f}%")
+            print(f"Val acc at epoch {i} = {val_acc*100:.2f}%")
 
     return num_tokens_seen, train_loss_log, val_loss_log

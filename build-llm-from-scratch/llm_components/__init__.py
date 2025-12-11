@@ -4,7 +4,7 @@ from .utils import (
     END_OF_TEXT_TOKEN,
     UNK_TOKEN,
     GPTDatasetV1,
-    calc_avg_acc_binary,
+    calc_acc_binary,
     calc_avg_loss_per_batch,
     calc_avg_loss_per_batch_binary,
     calc_batch_loss,
@@ -15,6 +15,7 @@ from .utils import (
     text_to_token_ids,
     token_ids_to_text,
     train_model_simple,
+    train_model_simple_binary,
     load_weights_from_hfmodel,
     load_gpt2_pretrained
 )

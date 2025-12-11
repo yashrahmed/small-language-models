@@ -660,12 +660,12 @@ def try_loading_classification_dataset():
     val.to_csv('./datasets/val.csv', index=None)
     test.to_csv('./datasets/test.csv', index=None)
 
-def try_setup_for_hamspam():
+def try_setup_for_hamspam(mode='train'):
     import pandas as pd
     from torch.utils.data import Dataset, DataLoader
     import tiktoken
-    from torch import tensor, long, device, nn, no_grad, manual_seed
-    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch_binary, calc_avg_acc_binary
+    from torch import tensor, long, device, nn, no_grad, manual_seed, optim, save, load, argmax
+    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch_binary, calc_acc_binary, train_model_simple_binary
 
     # Define a dataset subclass with truncation/padding functionality
     class SpamDataset(Dataset):
@@ -699,6 +699,22 @@ def try_setup_for_hamspam():
                 max_len = max(max_len, len(text))
             return max_len
     
+    def classify_text(text, model, tokenizer, device, pad_token_id=50256):
+        # Tokenize
+        text_tokens = tokenizer.encode(text)
+        # Adjust and align to context length
+        max_len = model.pos_emb.weight.shape[0]
+        text_tokens = text_tokens[:max_len]
+        text_tokens = text_tokens + [pad_token_id] * (max_len - len(text_tokens))
+        text_tokens = tensor(text_tokens, device=device).unsqueeze(0)
+        # Run it through the model
+        model.eval()
+        with no_grad():
+            logits = model(text_tokens)
+            logits = logits[:, -1, :]
+            pred = argmax(logits, dim=-1).item()
+        return "SPAM" if pred == 1 else "HAM"
+        
     apple_metal_device = device("mps")
     tokenizer = tiktoken.encoding_for_model("gpt2")
     batch_size = 8
@@ -727,51 +743,63 @@ def try_setup_for_hamspam():
     # print(len(test_dataloader))
 
     # Load weights from a Huggingface pretrained model and verify via text generation.
-    gpt_model_config, gpt_model = load_gpt2_pretrained(apple_metal_device, 123)
-    # text = "Every effort makes you"
-    # result = generate_text_simple(
-    #     text_to_token_ids(text, tokenizer),
-    #     gpt_model,
-    #     1024,
-    #     15, 
-    #     model_type="custom",
-    #     device=apple_metal_device)
-    # print(token_ids_to_text(result, tokenizer))
-    # print('#######')
-    # print(gpt_model)
+    if mode == 'train':
+        gpt_model_config, gpt_model = load_gpt2_pretrained(apple_metal_device, 123)
+        optimizer = optim.AdamW(gpt_model.parameters(), lr=5e-5, weight_decay=0.1)
 
-    # Freeze the model parameters
-    for param in gpt_model.parameters():
-        param.requires_grad = False # Disable gradient tracking.
-    
-    # Replace the 50257 way classification head with a 2 way classification head.
-    new_out_head = nn.Linear(gpt_model_config.get_embed_dim(), 2, device=apple_metal_device) # requires_grad is set to True by default
-    gpt_model.out_head = new_out_head
-
-    # Unfreeze the final norm and the last txfm block (This improves predictive performance as per the book)
-    for params in gpt_model.final_norm.parameters():
-        params.requires_grad = True
-    for params in gpt_model.trf_blocks[-1].parameters():
-        params.requires_grad = True
-    
-    # Test the avg loss calculation for the binary problem
-    manual_seed(123)
-    with no_grad():
-        train_acc = calc_avg_acc_binary(train_dataloader, gpt_model, apple_metal_device, 10)
-        val_acc = calc_avg_acc_binary(val_dataloader, gpt_model, apple_metal_device, 10)
-        test_acc = calc_avg_acc_binary(test_dataloader, gpt_model, apple_metal_device, 10)
-
-    print(f"Train acc = {train_acc*100:.2f}%")
-    print(f"Val acc = {val_acc*100:.2f}%")
-    print(f"Test acc = {test_acc*100:.2f}%")
-
-
-
-
+        # Freeze the model parameters
+        for param in gpt_model.parameters():
+            param.requires_grad = False # Disable gradient tracking.
         
+        # Replace the 50257 way classification head with a 2 way classification head.
+        new_out_head = nn.Linear(gpt_model_config.get_embed_dim(), 2, device=apple_metal_device) # requires_grad is set to True by default
+        gpt_model.out_head = new_out_head
+
+        # Unfreeze the final norm and the last txfm block (This improves predictive performance as per the book)
+        for params in gpt_model.final_norm.parameters():
+            params.requires_grad = True
+        for params in gpt_model.trf_blocks[-1].parameters():
+            params.requires_grad = True
+        
+        train_model_simple_binary(gpt_model, optimizer, train_dataloader, val_dataloader, apple_metal_device, num_epochs=10, eval_batch_size=5, eval_batch_interval=50, verbose=True)
+
+
+        gpt_model.train() # Put in train mode so that the ALL states are saved. This is required if the model needs more training 
+        print("......Saving Checkpoints......")
+        save(gpt_model.state_dict(), './checkpoints/bin_model.pth')
+    elif mode == 'eval' or mode == 'predict':
+        config = GPT_CONFIG_124M
+        config._qkv_bias = True
+        config._embed_dim
+        
+        print("......Loading Checkpoints......")
+        saved_model = GPTModel(config, device=apple_metal_device)
+        new_out_head = nn.Linear(config.get_embed_dim(), 2, device=apple_metal_device) # requires_grad is set to True by default
+        saved_model.out_head = new_out_head
+
+        model_checkpoint = load('./checkpoints/bin_model.pth', map_location=apple_metal_device)
+        saved_model.load_state_dict(model_checkpoint)
+        saved_model.eval()
+
+        if mode == 'eval':
+            with no_grad():
+                train_acc = calc_acc_binary(train_dataloader, saved_model, apple_metal_device, num_batches=len(train_dataloader))
+                val_acc = calc_acc_binary(val_dataloader, saved_model, apple_metal_device, num_batches=len(val_dataloader))
+                test_acc = calc_acc_binary(test_dataloader, saved_model, apple_metal_device, num_batches=len(test_dataloader))
+
+            print(f"Train acc = {train_acc*100:.2f}% | Val acc = {val_acc*100:.2f}% | Test acc = {test_acc*100:.2f}%")
+            # Train acc = 98.37% | Val acc = 98.61% | Test acc = 96.28%
+        elif mode == "predict":
+            text = "You have been specially selected to receive a 2000 pound award! Click here to apply!"
+            print(text)
+            print(classify_text(text, saved_model, tokenizer, apple_metal_device))
+            text = "Hey man! I just wanted to check if you'd be coming in tonight. Let me know asap!"
+            print(text)
+            print(classify_text(text, saved_model, tokenizer, apple_metal_device))
+
 
 if __name__ == '__main__':
-    try_setup_for_hamspam()
+    try_setup_for_hamspam("predict")
     # try_loading_classification_dataset()
     # try_download_gpt2()
     # try_loading_a_checkpoint()
