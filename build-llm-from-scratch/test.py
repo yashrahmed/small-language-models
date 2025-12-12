@@ -731,7 +731,7 @@ def try_setup_for_hamspam(mode='train'):
 
     # Load weights from a Huggingface pretrained model and verify via text generation.
     if mode == 'train':
-        gpt_model_config, gpt_model = load_gpt2_pretrained(apple_metal_device, 123)
+        gpt_model_config, gpt_model = load_gpt2_pretrained(apple_metal_device)
         optimizer = optim.AdamW(gpt_model.parameters(), lr=5e-5, weight_decay=0.1)
 
         # Freeze the model parameters
@@ -885,9 +885,14 @@ def try_setup_for_instruct_finetuning():
         shuffle=False, # Not sure why shuffle and drop last are set to false for the validation and the test set; I'll leave it as is for now
         drop_last=False,
         num_workers=num_workers)
-    
-    # for inputs, targets in train_dataloader:
-    #     print(inputs.shape, targets.shape)
+
+    gpt_model_config, gpt_model = load_gpt2_pretrained(apple_metal_device, type="small")
+    result = generate_text_simple(
+        text_to_token_ids("Every effort brings you", tokenizer),
+        gpt_model,
+        gpt_model_config.get_context_length(),
+        20, model_type="custom", device=apple_metal_device)
+    print(token_ids_to_text(result, tokenizer))
  
 
 
