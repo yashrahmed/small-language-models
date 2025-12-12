@@ -797,9 +797,19 @@ def try_setup_for_hamspam(mode='train'):
             print(text)
             print(classify_text(text, saved_model, tokenizer, apple_metal_device))
 
+def try_setup_for_instruct_finetuning():
+    import pandas as pd
+    from torch.utils.data import Dataset, DataLoader
+    import tiktoken
+    from torch import tensor, long, device, nn, no_grad, manual_seed, optim, save, load, argmax
+    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch_binary, calc_acc_binary, train_model_simple_binary
+
+    
+
 
 if __name__ == '__main__':
-    try_setup_for_hamspam("predict")
+    try_setup_for_instruct_finetuning()
+    # try_setup_for_hamspam("predict")
     # try_loading_classification_dataset()
     # try_download_gpt2()
     # try_loading_a_checkpoint()
