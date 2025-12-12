@@ -785,14 +785,12 @@ def try_setup_for_hamspam(mode='train'):
             print(classify_text(text, saved_model, tokenizer, apple_metal_device))
 
 def try_setup_for_instruct_finetuning(mode='train'):
-    import pandas as pd
     from torch.utils.data import Dataset, DataLoader
     import tiktoken
-    from torch import tensor, long, device, nn, no_grad, manual_seed, optim, save, load, argmax, stack
+    from torch import tensor, device, manual_seed, optim, save, load, stack
     from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch, train_model_simple
     import json
 
-    from torch.nn.functional import cross_entropy
     from torch.optim import AdamW
 
     apple_metal_device = device("mps")
@@ -887,7 +885,7 @@ def try_setup_for_instruct_finetuning(mode='train'):
         manual_seed(123)
         _, gpt_model = load_gpt2_pretrained(apple_metal_device, type="medium", load_full_init=True)
         optimizer = AdamW(gpt_model.parameters(), lr=5e-5, weight_decay=0.1)
-        num_epochs = 10
+        num_epochs = 3
 
         from time import time
 
@@ -918,7 +916,7 @@ def try_setup_for_instruct_finetuning(mode='train'):
         elif mode == "eval":
             config, gpt_model = load_model()
             gpt_model.eval()
-            for entry in test_split[:3]:
+            for entry in test_split[:5]:
                 input_text = format_input_entry(entry)
                 response_tokens = generate_text_simple(
                     text_to_token_ids(input_text, tokenizer),
@@ -935,7 +933,7 @@ def try_setup_for_instruct_finetuning(mode='train'):
                 print('_____________________________________________')
 
 if __name__ == '__main__':
-    try_setup_for_instruct_finetuning(mode="train")
+    try_setup_for_instruct_finetuning(mode="eval")
     # try_setup_for_hamspam("predict")
     # try_loading_classification_dataset()
     # try_download_gpt2()
