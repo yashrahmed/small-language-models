@@ -664,8 +664,8 @@ def try_setup_for_hamspam(mode='train'):
     import pandas as pd
     from torch.utils.data import Dataset, DataLoader
     import tiktoken
-    from torch import tensor, long, device, nn, no_grad, manual_seed, optim, save, load, argmax
-    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch_binary, calc_acc_binary, train_model_simple_binary
+    from torch import tensor, long, device, nn, no_grad, optim, save, load, argmax
+    from llm_components import load_gpt2_pretrained, calc_acc_binary, train_model_simple_binary
 
     # Define a dataset subclass with truncation/padding functionality
     class SpamDataset(Dataset):
@@ -724,23 +724,10 @@ def try_setup_for_hamspam(mode='train'):
     val_dataset = SpamDataset("./datasets/val.csv", tokenizer)
     test_dataset = SpamDataset("./datasets/test.csv", tokenizer)
 
-    # print(train_dataset.max_len)
-    # print(val_dataset.max_len)
-    # print(test_dataset.max_len)
-
     # Create dataloader objects for train, val and test.
     train_dataloader = DataLoader(train_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
     val_dataloader = DataLoader(val_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
     test_dataloader = DataLoader(test_dataset, batch_size, shuffle=True, num_workers=0, drop_last=True)
-
-    # for input_batch, tgt_batch in train_dataloader:
-    #     pass
-    # print(input_batch.shape)
-    # print(tgt_batch.shape)
-
-    # print(len(train_dataloader))
-    # print(len(val_dataloader))
-    # print(len(test_dataloader))
 
     # Load weights from a Huggingface pretrained model and verify via text generation.
     if mode == 'train':
@@ -803,8 +790,34 @@ def try_setup_for_instruct_finetuning():
     import tiktoken
     from torch import tensor, long, device, nn, no_grad, manual_seed, optim, save, load, argmax
     from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch_binary, calc_acc_binary, train_model_simple_binary
+    import json
 
+    def read_dataset():
+        with open('./datasets/instruction-data.json', 'r') as json_file:
+            dataset = json.loads(json_file.read())
+        return dataset
+
+    def format_input_entry(entry):
+        instruct_text = ("Below is an instruction that describes a task. Write a response that appropriately completes this request."
+                         f"\n\n### Instruction:\n{entry['instruction']}")
+        input_text = (f"\n\n### Input:\n{entry['input']}" if entry['input'] else '')
+        return instruct_text + input_text
     
+    def train_test_val_split(ds_ref, train_frac, validation_frac):
+        total = len(ds_ref)
+        train_idx_end = int(train_frac * total)
+        val_idx_end = train_idx_end + int(validation_frac * total)
+        return ds_ref[:train_idx_end], ds_ref[train_idx_end:val_idx_end], ds_ref[val_idx_end:]
+
+
+
+    dataset = read_dataset()
+    # print(format_input_entry(dataset[50]))
+    train_split, val_split, test_split = train_test_val_split(dataset, 0.85, 0.05)
+    print(len(train_split))
+    print(len(val_split))
+    print(len(test_split))
+
 
 
 if __name__ == '__main__':
