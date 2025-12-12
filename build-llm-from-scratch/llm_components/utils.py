@@ -183,6 +183,8 @@ def generate_text(
             probs = softmax(logits, dim=-1)
             nxt_token_ids = argmax(probs, dim=-1, keepdim=True)
         input_tokens_batch = cat((input_tokens_batch, nxt_token_ids), dim=-1)
+        if nxt_token_ids.item() == 50256:
+            break
 
     return input_tokens_batch
 
@@ -204,8 +206,10 @@ def generate_text_simple(
 
         logits = logits[:, -1, :]
         probs = softmax(logits, dim=-1)
-        nxt_token_ids = argmax(probs, dim=-1, keepdim=True)
+        nxt_token_ids = argmax(probs, dim=-1, keepdim=True)    
         input_tokens_batch = cat((input_tokens_batch, nxt_token_ids), dim=-1)
+        if nxt_token_ids.item() == 50256:
+            break
 
     return input_tokens_batch
 

@@ -828,11 +828,11 @@ def try_setup_for_instruct_finetuning(mode='train'):
         response_text = f"\n\n### Response:\n{entry['output']}"
         return fmt_input + response_text
     
-    def train_test_val_split(ds_ref, train_frac, validation_frac):
+    def train_test_val_split(ds_ref, train_frac, test_frac):
         total = len(ds_ref)
         train_idx_end = int(train_frac * total)
-        val_idx_end = train_idx_end + int(validation_frac * total)
-        return ds_ref[:train_idx_end], ds_ref[train_idx_end:val_idx_end], ds_ref[val_idx_end:]
+        test_idx_end = train_idx_end + int(test_frac * total)
+        return ds_ref[:train_idx_end], ds_ref[train_idx_end:test_idx_end], ds_ref[test_idx_end:]
     
     def ift_collate_fn(batch, pad_token_id=pad_token_id, mask_token_id=-100, device=apple_metal_device):
         # The whole len + 1 thing along with the adding a single pad_token before equalizing length is
@@ -858,7 +858,7 @@ def try_setup_for_instruct_finetuning(mode='train'):
 
 
     dataset = read_dataset()
-    train_split, val_split, test_split = train_test_val_split(dataset, 0.85, 0.05)
+    train_split, test_split, val_split = train_test_val_split(dataset, 0.85, 0.1)
 
     manual_seed(123)
     train_dataloader = DataLoader(
@@ -883,12 +883,11 @@ def try_setup_for_instruct_finetuning(mode='train'):
         drop_last=False,
         num_workers=num_workers)
 
-
     if mode == "train":
         manual_seed(123)
-        _, gpt_model = load_gpt2_pretrained(apple_metal_device, type="medium")
+        _, gpt_model = load_gpt2_pretrained(apple_metal_device, type="medium", load_full_init=True)
         optimizer = AdamW(gpt_model.parameters(), lr=5e-5, weight_decay=0.1)
-        num_epochs = 5
+        num_epochs = 10
 
         from time import time
 
@@ -905,22 +904,38 @@ def try_setup_for_instruct_finetuning(mode='train'):
     else:
 
         def load_model():
-            _, model = load_gpt2_pretrained(apple_metal_device, type="medium", load_full_init=False)
+            config, model = load_gpt2_pretrained(apple_metal_device, type="medium", load_full_init=True)
             model_checkpoint = load('./checkpoints/ift_model.pth', map_location=apple_metal_device)
             model.load_state_dict(model_checkpoint)
-            return model
-        
+            return config, model
+        manual_seed(123)
         if mode == "test":
             # Output = 6.7.... with HF weights    
-            gpt_model = load_model
+            _, gpt_model = load_model()
             gpt_model.eval()
             post_train_test_loss = calc_avg_loss_per_batch(test_dataloader, gpt_model, apple_metal_device, 5)
             print(f"Post training test loss = {post_train_test_loss}") # Outputs 1.24
         elif mode == "eval":
-            pass
+            config, gpt_model = load_model()
+            gpt_model.eval()
+            for entry in test_split[:3]:
+                input_text = format_input_entry(entry)
+                response_tokens = generate_text_simple(
+                    text_to_token_ids(input_text, tokenizer),
+                    gpt_model,
+                    config.get_context_length(),
+                    50,
+                    model_type="custom",
+                    device=apple_metal_device)
+                response_text = token_ids_to_text(response_tokens, tokenizer)
+                response_text = response_text[len(input_text):].replace("### Response:", "").strip()
+                print(input_text)
+                print(f"\nCorrect answer:\n{entry["output"]}")
+                print(f"\nPredicted answer:\n{response_text}")
+                print('_____________________________________________')
 
 if __name__ == '__main__':
-    try_setup_for_instruct_finetuning(mode="test")
+    try_setup_for_instruct_finetuning(mode="train")
     # try_setup_for_hamspam("predict")
     # try_loading_classification_dataset()
     # try_download_gpt2()
