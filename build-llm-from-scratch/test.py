@@ -797,6 +797,8 @@ def try_setup_for_instruct_finetuning():
     apple_metal_device = device("mps")
     pad_token_id = 50256
     tokenizer = tiktoken.encoding_for_model("gpt2")
+    num_workers = 0
+    batch_size = 8
 
     class InstructionDataset(Dataset):
         def __init__(self, data, tokenizer) -> None:
@@ -831,7 +833,7 @@ def try_setup_for_instruct_finetuning():
         val_idx_end = train_idx_end + int(validation_frac * total)
         return ds_ref[:train_idx_end], ds_ref[train_idx_end:val_idx_end], ds_ref[val_idx_end:]
     
-    def collate_fn(batch, pad_token_id=pad_token_id, mask_token_id=-100, device=apple_metal_device):
+    def ift_collate_fn(batch, pad_token_id=pad_token_id, mask_token_id=-100, device=apple_metal_device):
         # The whole len + 1 thing along with the adding a single pad_token before equalizing length is
         # that it makes it easy to generate target token ids.
 
@@ -859,13 +861,34 @@ def try_setup_for_instruct_finetuning():
     # ds = InstructionDataset(train_split, tokenizer)
     # print(len(ds))
     # print(ds[0])
-    input_batch, tgt_batch = collate_fn([[0,1,2,3,4],[5,6],[7,8,9]])
-    print(input_batch)
-    print('________')
-    print(tgt_batch)
+    # input_batch, tgt_batch = collate_fn([[0,1,2,3,4],[5,6],[7,8,9]])
 
-    print(cross_entropy(tensor([[0.1, 1.5, 1.2, 0.7]]), tensor([ 1])))
-
+    manual_seed(123)
+    train_dataloader = DataLoader(
+        InstructionDataset(train_split, tokenizer),
+        batch_size=batch_size,
+        collate_fn=ift_collate_fn,
+        shuffle=True,
+        drop_last=True,
+        num_workers=num_workers)
+    val_dataloader = DataLoader(
+        InstructionDataset(val_split, tokenizer),
+        batch_size=batch_size,
+        collate_fn=ift_collate_fn,
+        shuffle=False, # Not sure why shuffle and drop last are set to false for the validation and the test set; I'll leave it as is for now
+        drop_last=False,
+        num_workers=num_workers)
+    test_dataloader = DataLoader(
+        InstructionDataset(test_split, tokenizer),
+        batch_size=batch_size,
+        collate_fn=ift_collate_fn,
+        shuffle=False, # Not sure why shuffle and drop last are set to false for the validation and the test set; I'll leave it as is for now
+        drop_last=False,
+        num_workers=num_workers)
+    
+    # for inputs, targets in train_dataloader:
+    #     print(inputs.shape, targets.shape)
+ 
 
 
 if __name__ == '__main__':
