@@ -280,7 +280,7 @@ def load_weights_from_hfmodel(gpt, gpt_hf):
         gpt.final_norm.shift = to_param(gpt.final_norm.shift, d["transformer.ln_f.bias"])
         gpt.out_head.weight = to_param(gpt.out_head.weight, d["transformer.wte.weight"])
 
-def load_gpt2_pretrained(device, type="small"):
+def load_gpt2_pretrained(device, type="small", load_full_init=True):
     config = GPT_CONFIG_124M
     config._qkv_bias= True # GPT 2 use biases on Query, key and value matrices. This was stopped in subsequent models.
 
@@ -305,11 +305,12 @@ def load_gpt2_pretrained(device, type="small"):
     config._n_heads = model_conf["n_heads"]
     gpt_model = GPTModel(config)
 
-    # Download and initialize GPT model from Huggingface hub.
-    gpt_hf = GPT2LMHeadModel.from_pretrained(f"openai-community/{model_conf["hf_model_name"]}", cache_dir="./checkpoints")
-    gpt_hf.eval()
-
-    load_weights_from_hfmodel(gpt_model, gpt_hf)
+    if load_full_init:
+        # Download and initialize GPT model from Huggingface hub.
+        gpt_hf = GPT2LMHeadModel.from_pretrained(f"openai-community/{model_conf["hf_model_name"]}", cache_dir="./checkpoints")
+        gpt_hf.eval()
+        load_weights_from_hfmodel(gpt_model, gpt_hf)
+    
     gpt_model.eval()
     return config, gpt_model.to(device)
 

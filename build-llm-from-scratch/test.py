@@ -784,15 +784,16 @@ def try_setup_for_hamspam(mode='train'):
             print(text)
             print(classify_text(text, saved_model, tokenizer, apple_metal_device))
 
-def try_setup_for_instruct_finetuning():
+def try_setup_for_instruct_finetuning(mode='train'):
     import pandas as pd
     from torch.utils.data import Dataset, DataLoader
     import tiktoken
     from torch import tensor, long, device, nn, no_grad, manual_seed, optim, save, load, argmax, stack
-    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch_binary, calc_acc_binary, train_model_simple_binary
+    from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch, train_model_simple
     import json
 
     from torch.nn.functional import cross_entropy
+    from torch.optim import AdamW
 
     apple_metal_device = device("mps")
     pad_token_id = 50256
@@ -858,10 +859,6 @@ def try_setup_for_instruct_finetuning():
 
     dataset = read_dataset()
     train_split, val_split, test_split = train_test_val_split(dataset, 0.85, 0.05)
-    # ds = InstructionDataset(train_split, tokenizer)
-    # print(len(ds))
-    # print(ds[0])
-    # input_batch, tgt_batch = collate_fn([[0,1,2,3,4],[5,6],[7,8,9]])
 
     manual_seed(123)
     train_dataloader = DataLoader(
@@ -886,18 +883,44 @@ def try_setup_for_instruct_finetuning():
         drop_last=False,
         num_workers=num_workers)
 
-    gpt_model_config, gpt_model = load_gpt2_pretrained(apple_metal_device, type="small")
-    result = generate_text_simple(
-        text_to_token_ids("Every effort brings you", tokenizer),
-        gpt_model,
-        gpt_model_config.get_context_length(),
-        20, model_type="custom", device=apple_metal_device)
-    print(token_ids_to_text(result, tokenizer))
- 
 
+    if mode == "train":
+        manual_seed(123)
+        _, gpt_model = load_gpt2_pretrained(apple_metal_device, type="medium")
+        optimizer = AdamW(gpt_model.parameters(), lr=5e-5, weight_decay=0.1)
+        num_epochs = 5
+
+        from time import time
+
+        start_time = time()
+        train_model_simple(gpt_model, optimizer, train_dataloader, val_dataloader, apple_metal_device, num_epochs, eval_batch_interval=20, eval_batch_size=5, verbose=True)
+        end_time = time()
+        elapsed_min = (end_time - start_time)/60
+        print(f"Training took {elapsed_min:.2f} minutes")
+
+
+        gpt_model.train() # Put in train mode so that the ALL states are saved. This is required if the model needs more training 
+        print("......Saving Checkpoints......")
+        save(gpt_model.state_dict(), './checkpoints/ift_model.pth')
+    else:
+
+        def load_model():
+            _, model = load_gpt2_pretrained(apple_metal_device, type="medium", load_full_init=False)
+            model_checkpoint = load('./checkpoints/ift_model.pth', map_location=apple_metal_device)
+            model.load_state_dict(model_checkpoint)
+            return model
+        
+        if mode == "test":
+            # Output = 6.7.... with HF weights    
+            gpt_model = load_model
+            gpt_model.eval()
+            post_train_test_loss = calc_avg_loss_per_batch(test_dataloader, gpt_model, apple_metal_device, 5)
+            print(f"Post training test loss = {post_train_test_loss}") # Outputs 1.24
+        elif mode == "eval":
+            pass
 
 if __name__ == '__main__':
-    try_setup_for_instruct_finetuning()
+    try_setup_for_instruct_finetuning(mode="test")
     # try_setup_for_hamspam("predict")
     # try_loading_classification_dataset()
     # try_download_gpt2()
