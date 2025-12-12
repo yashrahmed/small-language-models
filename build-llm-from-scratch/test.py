@@ -788,9 +788,27 @@ def try_setup_for_instruct_finetuning():
     import pandas as pd
     from torch.utils.data import Dataset, DataLoader
     import tiktoken
-    from torch import tensor, long, device, nn, no_grad, manual_seed, optim, save, load, argmax
+    from torch import tensor, long, device, nn, no_grad, manual_seed, optim, save, load, argmax, stack
     from llm_components import load_gpt2_pretrained, text_to_token_ids, token_ids_to_text, generate_text_simple, calc_avg_loss_per_batch_binary, calc_acc_binary, train_model_simple_binary
     import json
+
+    from torch.nn.functional import cross_entropy
+
+    apple_metal_device = device("mps")
+    pad_token_id = 50256
+    tokenizer = tiktoken.encoding_for_model("gpt2")
+
+    class InstructionDataset(Dataset):
+        def __init__(self, data, tokenizer) -> None:
+            super().__init__()
+            self.data = data
+            self.encoded_text = [tokenizer.encode(add_response_to_fmt_entry(format_input_entry(entry), entry)) for entry in data]
+
+        def __getitem__(self, index):
+            return self.encoded_text[index]
+
+        def __len__(self):
+            return len(self.encoded_text)
 
     def read_dataset():
         with open('./datasets/instruction-data.json', 'r') as json_file:
@@ -803,20 +821,50 @@ def try_setup_for_instruct_finetuning():
         input_text = (f"\n\n### Input:\n{entry['input']}" if entry['input'] else '')
         return instruct_text + input_text
     
+    def add_response_to_fmt_entry(fmt_input, entry):
+        response_text = f"\n\n### Response:\n{entry['output']}"
+        return fmt_input + response_text
+    
     def train_test_val_split(ds_ref, train_frac, validation_frac):
         total = len(ds_ref)
         train_idx_end = int(train_frac * total)
         val_idx_end = train_idx_end + int(validation_frac * total)
         return ds_ref[:train_idx_end], ds_ref[train_idx_end:val_idx_end], ds_ref[val_idx_end:]
+    
+    def collate_fn(batch, pad_token_id=pad_token_id, mask_token_id=-100, device=apple_metal_device):
+        # The whole len + 1 thing along with the adding a single pad_token before equalizing length is
+        # that it makes it easy to generate target token ids.
 
+        # Note that -100 is the default ingore index value for the cross entropy function in pytorch.
+        # Hence why replace a token with -100 results in it being ignored from the loss calculation.
+        max_len = max([len(item)+1 for item in batch])
+        inputs = []
+        targets = []
+
+        for item in batch:
+            new_item = item.copy()
+            new_item.append(pad_token_id)
+            ignore_idx = len(item)
+            new_item.extend([pad_token_id]*(max_len - len(new_item)))
+            inputs.append(tensor(new_item[:-1]))
+            target = tensor(new_item[1:])
+            target[ignore_idx:] = mask_token_id
+            targets.append(target)
+        
+        return stack(inputs).to(device), stack(targets).to(device)
 
 
     dataset = read_dataset()
-    # print(format_input_entry(dataset[50]))
     train_split, val_split, test_split = train_test_val_split(dataset, 0.85, 0.05)
-    print(len(train_split))
-    print(len(val_split))
-    print(len(test_split))
+    # ds = InstructionDataset(train_split, tokenizer)
+    # print(len(ds))
+    # print(ds[0])
+    input_batch, tgt_batch = collate_fn([[0,1,2,3,4],[5,6],[7,8,9]])
+    print(input_batch)
+    print('________')
+    print(tgt_batch)
+
+    print(cross_entropy(tensor([[0.1, 1.5, 1.2, 0.7]]), tensor([ 1])))
 
 
 
