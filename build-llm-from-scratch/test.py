@@ -596,7 +596,7 @@ def try_loading_a_checkpoint():
     gen_text_tokenids = generate_text_simple(start_str_token_ids, saved_model, config.get_context_length(), 10, device=apple_metal_device)
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
 
-def try_download_gpt2():
+def try_download_gpt2(prompt, new_tokens=50, model_type="hf"):
     from torch import device, manual_seed
     from transformers import GPT2LMHeadModel
     from llm_components import (
@@ -618,13 +618,17 @@ def try_download_gpt2():
     gpt_hf = GPT2LMHeadModel.from_pretrained("openai-community/gpt2", cache_dir="./checkpoints")
     gpt_hf.eval()
 
-    load_weights_from_hfmodel(gpt_model, gpt_hf)
+    if model_type == "hf":
+        gpt_model = gpt_hf
+    else:
+        load_weights_from_hfmodel(gpt_model, gpt_hf)
     gpt_model.eval()
     gpt_model = gpt_model.to(apple_metal_device)
 
-    start_str = "Every effort moves you"
+    start_str = prompt
     start_str_token_ids = text_to_token_ids(start_str, tokenizer)
-    gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_model, config.get_context_length(), 25, model_type="custom", device=apple_metal_device)
+    # gen_text_tokenids = generate_text(start_str_token_ids, gpt_model, config, new_tokens, 20, 1.2, model_type="custom", device=apple_metal_device)
+    gen_text_tokenids = generate_text_simple(start_str_token_ids, gpt_model, config.get_context_length(), new_tokens, model_type=model_type, device=apple_metal_device)
     print(f"{token_ids_to_text(gen_text_tokenids, tokenizer)}")
 
 def try_loading_classification_dataset():
@@ -933,10 +937,11 @@ def try_setup_for_instruct_finetuning(mode='train'):
                 print('_____________________________________________')
 
 if __name__ == '__main__':
-    try_setup_for_instruct_finetuning(mode="eval")
+    # try_setup_for_instruct_finetuning(mode="eval")
     # try_setup_for_hamspam("predict")
     # try_loading_classification_dataset()
-    # try_download_gpt2()
+    try_download_gpt2('Why do subnetworks help? In dynamic conditions, the system must react and learn in constantly changing situations. Subnetworks restrict the flow of information to be highly context-dependent and relevant to each specific situation. In addition, errors will only propagate through the active subnetwork. Only the active neurons will update their feedforward weights and only the winning segment within those active neurons will update their dendritic weights. Thus, by utilizing context the brain can isolate information flow, and direct learning itself in a highly localized and task specific manner. The last two decades have seen significant experimental support for highly localized task specific learning in the dendrites of pyramidal neurons',
+                      200)
     # try_loading_a_checkpoint()
     # trying_out_a_train_loop_with_ckpt()
     # try_measure_dataset_loss()
