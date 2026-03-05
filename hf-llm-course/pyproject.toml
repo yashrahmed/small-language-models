@@ -8,3 +8,10 @@ dependencies = [
     "torch>=2.9.1",
     "transformers>=4.57.3",
 ]
+
+[project.scripts]
+hf-llm-course = "main:main"
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
