@@ -32,7 +32,7 @@ def qa_demo() -> None:
         model="Qwen/Qwen2.5-3B-Instruct",
         device="mps",
     )
-    question = "When did the Ye-4 make its maiden flight?"
+    question = "When did the Mig 21 make its maiden flight?"
     context = """
     The MiG-21 jet fighter was a continuation of Soviet jet fighters, starting with the transonic MiG-15 and MiG-17, and the supersonic MiG-19.
     A number of experimental Mach 2 Soviet designs were based on nose intakes with either swept-back wings, such as the Sukhoi Su-7, or tailed deltas, of which the MiG-21 would be the most successful.
